@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="deep_learning_ts",
+    name="deepmodels",
     version="0.1.0",  # Atualize a versão aqui
     author="GabrielFonsecaNunes",
     description="""DeepModels: Easy-to-Use Deep Learning Models for Time Series Analysis
