@@ -24,6 +24,6 @@ who need powerful deep learning techniques without the complexity of low-level i
         "pandas>=2.2.3",
         "numpy>=2.0.2",
         "statsmodels>=0.14.4",
-        "scikit-learn>=1.52"
+        "scikit-learn>=1.1.3"
     ]
 )
