@@ -15,7 +15,6 @@ from tensorflow.keras.callbacks import EarlyStopping
         
 from typing import Optional, Union
 
-import statsmodels.api as sm
 from statsmodels.stats.diagnostic import (
     acorr_ljungbox
 )
