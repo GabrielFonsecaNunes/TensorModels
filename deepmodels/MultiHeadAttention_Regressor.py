@@ -1,4 +1,3 @@
-
 import numpy as np
 import pandas as pd
 import sklearn.preprocessing import MinMaxScaler
@@ -20,7 +19,7 @@ from statsmodels.stats.stattools import durbin_watson
 from statsmodels.tsa.stattools import breakvar_heteroskedasticity_test
 from scipy.stats import jarque_bera, skew, kurtosis
 
-class GRU_Regressor(Sequential):
+class MultiHeadAttention_Regressor(Sequential):
     """
     Classe para construir e treinar um modelo LSTM para regresssão de séries temporais,
     com suporte para variáveis exógenas e normalização opcional.
@@ -237,7 +236,7 @@ class GRU_Regressor(Sequential):
         
         # Recria a arquitetura do modelo 
         
-        self.model = self.set_model()
+        self.model = self.set_mode()
         
         self.model.load_weights(weights_paht)
         self.trained = True

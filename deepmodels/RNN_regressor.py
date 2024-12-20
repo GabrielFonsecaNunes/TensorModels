@@ -20,7 +20,7 @@ from statsmodels.stats.stattools import durbin_watson
 from statsmodels.tsa.stattools import breakvar_heteroskedasticity_test
 from scipy.stats import jarque_bera, skew, kurtosis
 
-class GRU_Regressor(Sequential):
+class RNN_Regressor(Sequential):
     """
     Classe para construir e treinar um modelo LSTM para regresssão de séries temporais,
     com suporte para variáveis exógenas e normalização opcional.
