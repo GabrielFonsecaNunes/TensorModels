@@ -69,7 +69,7 @@ class LSTM_Regressor(Sequential):
             self: O modelo LSTM configurado.
         """
         self.add(LSTM(units = 32, activation = 'relu', return_sequences = True, input_shape = self.input_shape_model))
-        self.add(Droupout(0.2))
+        self.add(Dropout(0.2))
         self.add(LSTM(Units = 16, return_sequences = False))
         self.add(Dense(self.time_step_in, activation = 'linear'))
         self.compile(optimizer= 'adam', loss = 'mean_squared_error')
