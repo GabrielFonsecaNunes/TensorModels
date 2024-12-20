@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras import Sequential
-from tensorflow.keras.layers import Dense, SimpleRNN, Droupout
+from tensorflow.keras.layers import Dense, SimpleRNN, Dropout
 from tensorflow.keras.callbacks import EarlyStopping
 from typing import Optional, Union
 
