@@ -130,7 +130,7 @@ class GRU_Regressor(Sequential):
         
         dataX, dataY = self.create_dataset()
         
-        early_stopping = EarlyStopping(monitor = 'loss', patience = patience, restore_best_weigths = True)
+        early_stopping = EarlyStopping(monitor = 'loss', patience = patience)
 
         super().fit(dataX, dataY, epochs = epochs, batch_size = batch_size, verbose = 1, callbacks = [early_stopping])
         self.trained = True
