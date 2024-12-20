@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="deepmodels",
-    version="0.1.0",  # Atualize a versão aqui
+    version="0.0.1",  # Versao Beta
     author="GabrielFonsecaNunes",
     description="""DeepModels: Easy-to-Use Deep Learning Models for Time Series Analysis
 DeepModels is a Python library that provides simple and intuitive access to advanced deep learning architectures such as\n 
@@ -19,4 +19,11 @@ who need powerful deep learning techniques without the complexity of low-level i
         "Operating System :: OS Independent",
     ],
     python_requires='>=3.9',
+    install_requires = [
+        "tensorflow>=2.18.0",
+        "pandas>=2.2.3",
+        "numpy>=2.0.2",
+        "statsmodels>=0.14.4",
+        "scikit-learn>=1.52"
+    ]
 )
