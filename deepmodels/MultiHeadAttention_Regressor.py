@@ -1,9 +1,18 @@
 import numpy as np
 import pandas as pd
 import sklearn.preprocessing import MinMaxScaler
-import tensorflow.keras import Sequential
-import tensorflow.keras.layers import Dense, LSTM, Droupout
+
+from tensorflow.keras.layers import (
+    Sequential,
+    MultiHeadAttention, 
+    Dense, 
+    Dropout, 
+    LayerNormalization, 
+    Input, 
+    GlobalAveragePooling1D
+)
 from tensorflow.keras.callbacks import EarlyStopping
+        
 from typing import Optional, Union
 
 import statsmodels.api as sm
@@ -61,18 +70,32 @@ class MultiHeadAttention_Regressor(Sequential):
         shape = n + m 
         return (self.time_step_in, shape)
         
-    def set_model(self): # Otimizar o numero de neuronios a partir das features
+    def set_model(self):
         """
-        Define a arquitetura do Modelo LSTM
+        Define a arquitetura do Modelo MultiHeadAttention.
         
         Returns:
-            self: O modelo LSTM configurado.
+            self: O modelo configurado com MultiHeadAttention.
         """
-        self.add(LSTM(units = 32, activation = 'relu', return_sequences = True, input_shape = self.input_shape_model))
-        self.add(Droupout(0.2))
-        self.add(LSTM(Units = 16, return_sequences = False))
-        self.add(Dense(self.time_step_in, activation = 'linear'))
-        self.compile(optimizer= 'adam', loss = 'mean_squared_error')
+        
+
+        # Camada de atenção multi-head
+        self.add(Input(shape=self.input_shape_model))
+        self.add(MultiHeadAttention(num_heads=4, key_dim=32))
+        
+        # Normalização e dropout para estabilizar o treinamento
+        self.add(LayerNormalization(epsilon=1e-6))
+        self.add(Dropout(0.2))
+
+        # Camada de pool global para condensar as informações
+        self.add(GlobalAveragePooling1D())
+
+        # Camada densa final para previsão
+        self.add(Dense(self.time_step_in, activation='linear'))
+
+        # Compila o modelo
+        self.compile(optimizer='adam', loss='mean_squared_error')
+
         
     def create_dataset(self):
         """

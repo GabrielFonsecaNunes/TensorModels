@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import sklearn.preprocessing import MinMaxScaler
 import tensorflow.keras import Sequential
-import tensorflow.keras.layers import Dense, LSTM, Droupout
+import tensorflow.keras.layers import Dense, SimpleRNN, Droupout
 from tensorflow.keras.callbacks import EarlyStopping
 from typing import Optional, Union
 
@@ -62,18 +62,24 @@ class RNN_Regressor(Sequential):
         shape = n + m 
         return (self.time_step_in, shape)
         
-    def set_model(self): # Otimizar o numero de neuronios a partir das features
+    def set_model(self):
         """
-        Define a arquitetura do Modelo LSTM
+        Define a arquitetura do Modelo RNN
         
         Returns:
-            self: O modelo LSTM configurado.
+            self: O modelo RNN configurado.
         """
-        self.add(LSTM(units = 32, activation = 'relu', return_sequences = True, input_shape = self.input_shape_model))
-        self.add(Droupout(0.2))
-        self.add(LSTM(Units = 16, return_sequences = False))
-        self.add(Dense(self.time_step_in, activation = 'linear'))
-        self.compile(optimizer= 'adam', loss = 'mean_squared_error')
+        # Adiciona a primeira camada RNN com 32 neurônios
+        self.add(SimpleRNN(units=32, activation='relu', return_sequences=True, input_shape=self.input_shape_model))
+        # Adiciona Dropout para evitar overfitting
+        self.add(Dropout(0.2))
+        # Adiciona a segunda camada RNN com 16 neurônios
+        self.add(SimpleRNN(units=16, return_sequences=False))
+        # Adiciona a camada densa final
+        self.add(Dense(self.time_step_in, activation='linear'))
+        # Compila o modelo
+        self.compile(optimizer='adam', loss='mean_squared_error')
+
         
     def create_dataset(self):
         """
