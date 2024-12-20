@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-import sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler
 
 from tensorflow.keras.layers import (
     Sequential,

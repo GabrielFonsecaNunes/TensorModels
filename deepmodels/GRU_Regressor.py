@@ -1,7 +1,7 @@
 
 import numpy as np
 import pandas as pd
-import sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler
 import tensorflow.keras import Sequential
 import tensorflow.keras.layers import Dense, LSTM, Droupout
 from tensorflow.keras.callbacks import EarlyStopping
