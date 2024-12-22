@@ -71,7 +71,7 @@ class LSTM_Regressor(Sequential):
         self.add(LSTM(units = 32, activation = 'relu', return_sequences = True, input_shape = self.input_shape_model))
         self.add(Dropout(0.2))
         self.add(LSTM(units = 16, return_sequences = False))
-        self.add(Dense(self.time_step_in, activation = 'linear'))
+        self.add(Dense(self.time_step_out, activation = 'linear'))
         self.compile(optimizer= 'adam', loss = 'mean_squared_error')
         
     def create_dataset(self):
@@ -138,8 +138,9 @@ class LSTM_Regressor(Sequential):
         """
         Método para realizar previsões com o modelo treinado dado
         
-        endog (np.ndarray | pd.DataFrame | pd.Serie | None opctional): Variaveis Exogenas
-        steps (int): Numero de passo para forescating a frente
+        exog (np.ndarray | pd.DataFrame | pd.Serie | None opctional): Variaveis Exogenas
+        steps (int): Numero de passo para forescating a frente, caso o modelos treinado somente com 
+        autovariavel, definir step.
         """
         if not self.trained:
             raise ValueError("O treinamento é requido. Faça o treinamento com model.fit()")
@@ -157,8 +158,7 @@ class LSTM_Regressor(Sequential):
                 for step in range(steps):
                     if step == 0:
                         # Faz a proje;'ao do primeiro valor apos treinamento somente com variaveis endog
-                        array = np.array(self.endog[-self.time_step_in:])
-                        array = array.reshape(1, self.time_step_in, 1)
+                        array = np.array(self.endog[-self.time_step_in:]).reshape(1, self.time_step_in, 1)
                         y_pred_value = self.predict(array).flatten()
                         y_pred.append(y_pred_value)
                     else:
@@ -179,40 +179,40 @@ class LSTM_Regressor(Sequential):
                             y_pred_value = self.predict(array).flatten()
                             y_pred.append(y_pred_value)
                             
-                else:
-                    if self.normalize and exog is not None:
-                        exog = self.scaler.transform(exog)
-                        
-                    steps = exog.shape[0] if steps is None else steps
+            else:
+                if self.normalize and exog is not None:
+                    exog = self.scaler.transform(exog)
                     
-                    for step in range(steps):
-                        if step == 0:
-                            array = np.concatenate((np.array(self.endog[-self.time_step_in + step:]).reshape(-1, 1), np.array(self.exog[-self.time_step_in:])), axis = 1)
-                            array = array.reshape(1, array.reshape[0], array.shape[1])
+                steps = exog.shape[0] if steps is None else steps
+                
+                for step in range(steps):
+                    if step == 0:
+                        array = np.concatenate((np.array(self.endog[-self.time_step_in + step:]).reshape(-1, 1), np.array(self.exog[-self.time_step_in:])), axis = 1)
+                        array = array.reshape(1, array.reshape[0], array.shape[1])
+                        
+                        y_pred_value = self.predict(array).flatten()
+                        y_pred.append(y_pred_value)
+                        
+                    else:
+                        if step < self.time_step_in:
+                            array1 = np.concatenate((np.array(self.endog[-self.time_step_in + step:]).reshape(-1, 1), self.exog[-self.time_step_in + step:]), axis = 1)
+                            array2 = np.concatenate(np.array(y_pred).reshape(-1, 1), np.array(exog[:step]), axis = 1)
+                            
+                            array = np.concatenate((array1, array2), axis = 0)
+                            array = array.reshape(1, array.shape[0], array.shape[1])
                             
                             y_pred_value = self.predict(array).flatten()
                             y_pred.append(y_pred_value)
                             
                         else:
-                            if step < self.time_step_in:
-                                array1 = np.concatenate((np.array(self.endog[-self.time_step_in + step:]).reshape(-1, 1), self.exog[-self.time_step_in + step:]), axis = 1)
-                                array2 = np.concatenate(np.array(y_pred).reshape(-1, 1), np.array(exog[:step]), axis = 1)
-                                
-                                array = np.concatenate((array1, array2), axis = 0)
-                                array = array.reshape(1, array.shape[0], array.shape[1])
-                                
-                                y_pred_value = self.predict(array).flatten()
-                                y_pred.append(y_pred_value)
-                                
-                            else:
-                                array1 = np.array(y_pred[-self.time_step_in:]).reshape(-1, 1)
-                                array2 = np.array(np.array(exog[step - self.time_step_in:step]))
-                                
-                                array = np.concatenate((array1, array2), axis = 1)
-                                array = array.reshape(1, array.shape[0], array.shape[1])
-                                
-                                y_pred_value = self.predict(array).flatten()
-                                y_pred.append(y_pred_value)
+                            array1 = np.array(y_pred[-self.time_step_in:]).reshape(-1, 1)
+                            array2 = np.array(np.array(exog[step - self.time_step_in:step]))
+                            
+                            array = np.concatenate((array1, array2), axis = 1)
+                            array = array.reshape(1, array.shape[0], array.shape[1])
+                            
+                            y_pred_value = self.predict(array).flatten()
+                            y_pred.append(y_pred_value)
         
         return np.array(y_pred).flatten()
     
@@ -243,60 +243,59 @@ class LSTM_Regressor(Sequential):
         
     def summary_model(self):
         """
-        Retorna o sumario do modelo treinado
+        Retorna o sumário do modelo treinado.
         """
-        
         if not self.trained:
-            raise ValueError("O Modelo ainda nao foi treinado. Faça o treinamento com model.fit()")
+            raise ValueError("O Modelo ainda não foi treinado. Faça o treinamento com model.fit()")
         
         y_pred_train = self.fittedvalues()
         
-        # Caclula os residuos 
+        # Calcula os resíduos
         residuals = self.endog[self.time_step_in:] - y_pred_train
-        rss = np.sum((self.endog[self.time_step_in:]) - y_pred_train) ** 2
-        rse = np.sum((self.endog[self.time_step_in:]) - y_pred_train.mean()) ** 2
+        rss = np.sum((self.endog[self.time_step_in:] - y_pred_train) ** 2)
+        rse = np.sum((self.endog[self.time_step_in:] - y_pred_train.mean()) ** 2)
         
         n = len(self.endog[self.time_step_in:])
         k = self.time_step_out if self.exog is None else self.exog.shape[1] + self.time_step_out
         
         # Calcular o R2
-        r_square = 1 - (rss/rse)
+        r_square = 1 - (rss / rse)
+        adj_r_square = 1 - ((1 - r_square) * (n - 1) / (n - k - 1))
         
-        adj_r_square = 1 - ((1 - r_square) * (n - 1)/(n - k - 1))
-        
-        log_likelihood = -n/2 * np.log(2 * np.pi * rss/ n) - rss/(2 * rss / n)     
+        log_likelihood = -n / 2 * np.log(2 * np.pi * rss / n) - rss / (2 * rss / n)     
         aic = 2 * k - 2 * log_likelihood
         bic = np.log(n) * k - 2 * log_likelihood
         
-        durbin_watson = durbin_watson(residuals)
+        # Calcula o Durbin-Watson
+        dw_stat = durbin_watson(residuals)
         
-        ljungbox = acorr_ljungbox(residuals, lags = None)
+        # Teste de Ljung-Box
+        num_lags = min(10, len(residuals) // 2)
+        ljungbox_results = acorr_ljungbox(residuals, lags=num_lags, return_df=True)
+        ljungbox_pvalue = ljungbox_results['lb_pvalue'].iloc[-1]
         
-        # Heterodascidade
+        # Outros testes
         het = breakvar_heteroskedasticity_test(residuals)
-        
-        # Teste de Jarque-Bera
         jb_test = jarque_bera(residuals)
-        
-        # Skew e Kurtosis
         skewness = skew(residuals)
         kurt = kurtosis(residuals)
         
         data_fit = str(dt.strftime(self.date_fit, "%Y-%m-%d"))          
         
-        # Exibir o DataFrame com so resuldos dos testes
-        summary_str =  f"""
-                    Deep Learning LSTM Regression Results 
-====================================================================================
-Model: LSTM                                      R-squared: {r_square:.2f}
-Num step in: {self.time_step_in}                                   Adj. R-squared: {adj_r_square:.2f}
-Num step outs: {self.time_step_out}                                 Log-Likelihood: {log_likelihood:.2f}
-No. Observations: {self.endog.shape[0]}                             AIC: {aic:.2f}
-Date: {data_fit}                                 BIC: {bic:.2f}                               
-====================================================================================
-Durbin-Watson: {durbin_watson:.2f}                            Jarque-Bera (JB): {jb_test[0]:.2f}
-Prob (Ljung-Box): {ljungbox['lb_pvalue'][1]:.2f}                           Prob(JB) {jb_test[1]:.2f}
-Heteroskedasticity (H): {het[0]:.2f}                            Skew: {skewness:.2f}
-Prob(H) (two-side): {het[1]:.2f}                                Kurtosis: {kurt:.2f}
-"""
+        # Exibir o sumário
+        summary_str = (
+            f"                          Deep Learning LSTM Regression Results                          \n"
+            f"====================================================================================\n"
+            f"Model:                 LSTM                     R-squared:               {r_square:>8.2f}\n"
+            f"Num step in:           {self.time_step_in:<25}Adj. R-squared:          {adj_r_square:>8.2f}\n"
+            f"Num step outs:         {self.time_step_out:<25}Log-Likelihood:         {log_likelihood:>8.2f}\n"
+            f"No. Observations:      {self.endog.shape[0]:<25}AIC:                    {aic:>8.2f}\n"
+            f"Date:                  {data_fit:<25}BIC:                    {bic:>8.2f}\n"
+            f"====================================================================================\n"
+            f"Durbin-Watson:         {dw_stat:>8.2f}                 Jarque-Bera (JB):       {jb_test[0]:>8.2f}\n"
+            f"Prob (Ljung-Box):      {ljungbox_pvalue:.2e}                 Prob(JB):              {jb_test[1]:>8.2f}\n"
+            f"Heteroskedasticity(H): {het[0]:>8.2f}                 Skew:                  {skewness:>8.2f}\n"
+            f"Prob(H) (two-side):    {het[1]:>8.2f}                 Kurtosis:              {kurt:>8.2f}\n"
+            f"====================================================================================\n"
+        )
         return summary_str

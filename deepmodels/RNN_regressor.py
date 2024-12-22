@@ -21,14 +21,14 @@ from scipy.stats import jarque_bera, skew, kurtosis
 
 class RNN_Regressor(Sequential):
     """
-    Classe para construir e treinar um modelo LSTM para regresssão de séries temporais,
+    Classe para construir e treinar um modelo RNN para regresssão de séries temporais,
     com suporte para variáveis exógenas e normalização opcional.
     """
     
     def __init__(self, endog, exog: Optional[Union[np.ndarray, pd.DataFrame, pd.Series]] = None, time_step_in: int = 10, 
                  time_step_out: int = 1, normalize: Optional[bool] = True, **kwargs):
         """
-        Inicializa a classe LSTM_Regressor
+        Inicializa a classe RNN_Regressor
         
         Args:
             endog (np.array | pd.DataFrame | pd.Series): Serie Temporal
@@ -51,7 +51,7 @@ class RNN_Regressor(Sequential):
         
     def get_input_shape_model(self):
         """
-        Retorna a forma de entrada para a LSTM
+        Retorna a forma de entrada para a RNN
         
         Returns:
             tuple: A forma de entrada
@@ -75,17 +75,17 @@ class RNN_Regressor(Sequential):
         # Adiciona a segunda camada RNN com 16 neurônios
         self.add(SimpleRNN(units=16, return_sequences=False))
         # Adiciona a camada densa final
-        self.add(Dense(self.time_step_in, activation='linear'))
+        self.add(Dense(self.time_step_out, activation='linear'))
         # Compila o modelo
         self.compile(optimizer='adam', loss='mean_squared_error')
 
         
     def create_dataset(self):
         """
-        Cria janelas de tempo para a entrada LSTM
+        Cria janelas de tempo para a entrada RNN
         
         Returns:
-            tuple: Arrays de entrada e saída para o modelo LSTM.
+            tuple: Arrays de entrada e saída para o modelo RNN.
         """
         
         dataX, dataY = [], []
@@ -124,7 +124,7 @@ class RNN_Regressor(Sequential):
     
     def fit(self, epochs = 100, batch_size = 16, patience = 10):
         """
-        Treina o modelo LSTM
+        Treina o modelo RNN
         
         Args:
             epochs (int): Número de épocas para treinamento
@@ -144,7 +144,7 @@ class RNN_Regressor(Sequential):
         """
         Método para realizar previsões com o modelo treinado dado
         
-        endog (np.ndarray | pd.DataFrame | pd.Serie | None opctional): Variaveis Exogenas
+        exog (np.ndarray | pd.DataFrame | pd.Serie | None opctional): Variaveis Exogenas
         steps (int): Numero de passo para forescating a frente
         """
         if not self.trained:
@@ -185,40 +185,40 @@ class RNN_Regressor(Sequential):
                             y_pred_value = self.predict(array).flatten()
                             y_pred.append(y_pred_value)
                             
-                else:
-                    if self.normalize and exog is not None:
-                        exog = self.scaler.transform(exog)
-                        
-                    steps = exog.shape[0] if steps is None else steps
+            else:
+                if self.normalize and exog is not None:
+                    exog = self.scaler.transform(exog)
                     
-                    for step in range(steps):
-                        if step == 0:
-                            array = np.concatenate((np.array(self.endog[-self.time_step_in + step:]).reshape(-1, 1), np.array(self.exog[-self.time_step_in:])), axis = 1)
-                            array = array.reshape(1, array.reshape[0], array.shape[1])
+                steps = exog.shape[0] if steps is None else steps
+                
+                for step in range(steps):
+                    if step == 0:
+                        array = np.concatenate((np.array(self.endog[-self.time_step_in + step:]).reshape(-1, 1), np.array(self.exog[-self.time_step_in:])), axis = 1)
+                        array = array.reshape(1, array.reshape[0], array.shape[1])
+                        
+                        y_pred_value = self.predict(array).flatten()
+                        y_pred.append(y_pred_value)
+                        
+                    else:
+                        if step < self.time_step_in:
+                            array1 = np.concatenate((np.array(self.endog[-self.time_step_in + step:]).reshape(-1, 1), self.exog[-self.time_step_in + step:]), axis = 1)
+                            array2 = np.concatenate(np.array(y_pred).reshape(-1, 1), np.array(exog[:step]), axis = 1)
+                            
+                            array = np.concatenate((array1, array2), axis = 0)
+                            array = array.reshape(1, array.shape[0], array.shape[1])
                             
                             y_pred_value = self.predict(array).flatten()
                             y_pred.append(y_pred_value)
                             
                         else:
-                            if step < self.time_step_in:
-                                array1 = np.concatenate((np.array(self.endog[-self.time_step_in + step:]).reshape(-1, 1), self.exog[-self.time_step_in + step:]), axis = 1)
-                                array2 = np.concatenate(np.array(y_pred).reshape(-1, 1), np.array(exog[:step]), axis = 1)
-                                
-                                array = np.concatenate((array1, array2), axis = 0)
-                                array = array.reshape(1, array.shape[0], array.shape[1])
-                                
-                                y_pred_value = self.predict(array).flatten()
-                                y_pred.append(y_pred_value)
-                                
-                            else:
-                                array1 = np.array(y_pred[-self.time_step_in:]).reshape(-1, 1)
-                                array2 = np.array(np.array(exog[step - self.time_step_in:step]))
-                                
-                                array = np.concatenate((array1, array2), axis = 1)
-                                array = array.reshape(1, array.shape[0], array.shape[1])
-                                
-                                y_pred_value = self.predict(array).flatten()
-                                y_pred.append(y_pred_value)
+                            array1 = np.array(y_pred[-self.time_step_in:]).reshape(-1, 1)
+                            array2 = np.array(np.array(exog[step - self.time_step_in:step]))
+                            
+                            array = np.concatenate((array1, array2), axis = 1)
+                            array = array.reshape(1, array.shape[0], array.shape[1])
+                            
+                            y_pred_value = self.predict(array).flatten()
+                            y_pred.append(y_pred_value)
         
         return np.array(y_pred).flatten()
     
@@ -249,60 +249,59 @@ class RNN_Regressor(Sequential):
         
     def summary_model(self):
         """
-        Retorna o sumario do modelo treinado
+        Retorna o sumário do modelo treinado.
         """
-        
         if not self.trained:
-            raise ValueError("O Modelo ainda nao foi treinado. Faça o treinamento com model.fit()")
+            raise ValueError("O Modelo ainda não foi treinado. Faça o treinamento com model.fit()")
         
         y_pred_train = self.fittedvalues()
         
-        # Caclula os residuos 
+        # Calcula os resíduos
         residuals = self.endog[self.time_step_in:] - y_pred_train
-        rss = np.sum((self.endog[self.time_step_in:]) - y_pred_train) ** 2
-        rse = np.sum((self.endog[self.time_step_in:]) - y_pred_train.mean()) ** 2
+        rss = np.sum((self.endog[self.time_step_in:] - y_pred_train) ** 2)
+        rse = np.sum((self.endog[self.time_step_in:] - y_pred_train.mean()) ** 2)
         
         n = len(self.endog[self.time_step_in:])
         k = self.time_step_out if self.exog is None else self.exog.shape[1] + self.time_step_out
         
         # Calcular o R2
-        r_square = 1 - (rss/rse)
+        r_square = 1 - (rss / rse)
+        adj_r_square = 1 - ((1 - r_square) * (n - 1) / (n - k - 1))
         
-        adj_r_square = 1 - ((1 - r_square) * (n - 1)/(n - k - 1))
-        
-        log_likelihood = -n/2 * np.log(2 * np.pi * rss/ n) - rss/(2 * rss / n)     
+        log_likelihood = -n / 2 * np.log(2 * np.pi * rss / n) - rss / (2 * rss / n)     
         aic = 2 * k - 2 * log_likelihood
         bic = np.log(n) * k - 2 * log_likelihood
         
-        durbin_watson = durbin_watson(residuals)
+        # Calcula o Durbin-Watson
+        dw_stat = durbin_watson(residuals)
         
-        ljungbox = acorr_ljungbox(residuals, lags = None)
+        # Teste de Ljung-Box
+        num_lags = min(10, len(residuals) // 2)
+        ljungbox_results = acorr_ljungbox(residuals, lags=num_lags, return_df=True)
+        ljungbox_pvalue = ljungbox_results['lb_pvalue'].iloc[-1]
         
-        # Heterodascidade
+        # Outros testes
         het = breakvar_heteroskedasticity_test(residuals)
-        
-        # Teste de Jarque-Bera
         jb_test = jarque_bera(residuals)
-        
-        # Skew e Kurtosis
         skewness = skew(residuals)
         kurt = kurtosis(residuals)
         
         data_fit = str(dt.strftime(self.date_fit, "%Y-%m-%d"))          
         
-        # Exibir o DataFrame com so resuldos dos testes
-        summary_str =  f"""
-                    Deep Learning LSTM Regression Results 
-====================================================================================
-Model: LSTM                                      R-squared: {r_square:.2f}
-Num step in: {self.time_step_in}                                   Adj. R-squared: {adj_r_square:.2f}
-Num step outs: {self.time_step_out}                                 Log-Likelihood: {log_likelihood:.2f}
-No. Observations: {self.endog.shape[0]}                             AIC: {aic:.2f}
-Date: {data_fit}                                 BIC: {bic:.2f}                               
-====================================================================================
-Durbin-Watson: {durbin_watson:.2f}                            Jarque-Bera (JB): {jb_test[0]:.2f}
-Prob (Ljung-Box): {ljungbox['lb_pvalue'][1]:.2f}                           Prob(JB) {jb_test[1]:.2f}
-Heteroskedasticity (H): {het[0]:.2f}                            Skew: {skewness:.2f}
-Prob(H) (two-side): {het[1]:.2f}                                Kurtosis: {kurt:.2f}
-"""
+        # Exibir o sumário
+        summary_str = (
+            f"                          Deep Learning RNN Regression Results                          \n"
+            f"====================================================================================\n"
+            f"Model:                 RNN                     R-squared:               {r_square:>8.2f}\n"
+            f"Num step in:           {self.time_step_in:<25}Adj. R-squared:          {adj_r_square:>8.2f}\n"
+            f"Num step outs:         {self.time_step_out:<25}Log-Likelihood:         {log_likelihood:>8.2f}\n"
+            f"No. Observations:      {self.endog.shape[0]:<25}AIC:                    {aic:>8.2f}\n"
+            f"Date:                  {data_fit:<25}BIC:                    {bic:>8.2f}\n"
+            f"====================================================================================\n"
+            f"Durbin-Watson:         {dw_stat:>8.2f}                 Jarque-Bera (JB):       {jb_test[0]:>8.2f}\n"
+            f"Prob (Ljung-Box):      {ljungbox_pvalue:.2e}                 Prob(JB):              {jb_test[1]:>8.2f}\n"
+            f"Heteroskedasticity(H): {het[0]:>8.2f}                 Skew:                  {skewness:>8.2f}\n"
+            f"Prob(H) (two-side):    {het[1]:>8.2f}                 Kurtosis:              {kurt:>8.2f}\n"
+            f"====================================================================================\n"
+        )
         return summary_str
