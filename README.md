@@ -14,4 +14,4 @@ Designed for **time series forecasting and modeling**, DeepModels offers a **use
 You can install the library via pip (once it's available on PyPI):
 
 ```bash
-pip install deepmodels
+pip install git+https://github.com/GabrielFonsecaNunes/deepmodels
