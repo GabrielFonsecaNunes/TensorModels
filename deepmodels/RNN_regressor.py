@@ -48,11 +48,13 @@ class RNN_Regressor(Sequential):
         self.random_state = random_state
         self.set_random_seed()
         self.normalize = normalize
-        self.scaler = MinMaxScaler() if normalize else None
+        self.normalized_endog = MinMaxScaler() # Scaler endog
+        self.normalized_exog = MinMaxScaler() if normalize else None # Scaler exog
         self.input_shape_model = self.get_input_shape_model()
         self.model = self.set_model()
         self.date_fit = dt.now()
         self.trained = False
+        
         
     def set_random_seed(self):
         """
@@ -96,47 +98,36 @@ class RNN_Regressor(Sequential):
                        bias_initializer=tf.keras.initializers.Zeros()))
         self.compile(optimizer='adam', loss='mean_squared_error')
 
-        
     def create_dataset(self):
         """
-        Creates time windows for RNN input
-        
+        Creates time windows for LSTM input
+
         Returns:
-            tuple: Input and output arrays for the RNN model.
+            tuple: Input and output arrays for the LSTM model.
         """
-        
         dataX, dataY = [], []
-        y = self.endog
+        y = self.normalized_endog.fit_transform(np.array(self.endog).reshape(-1, 1)).flatten()
         X = self.exog
-        
+
         if self.normalize and self.exog is not None:
-            X = self.scaler.fit_transform(X.copy())
-        
-        # Autoregressive method without exogenous variables
+            X = self.normalized_exog.fit_transform(X.copy())
+
+        # Autoregression method without exogenous variables
         if X is None:
             for i in range(len(y) - self.time_step_in):
-                
-                # Input Sequence (Time series values in a sliding window)
-                dataX.append(np.array(y[i:self.time_step_in + i]))
-                
-                # Output Sequence (Time series values in a sliding window)
+                # Input sequence (values of the series in a sliding window)
+                dataX.append(np.array(y[i:self.time_step_in + i]).reshape(-1, 1))  # Ensure the shape is (time_step_in, 1)
+                # Output sequence (values of the series in a sliding window)
                 dataY.append(y[self.time_step_in + i: self.time_step_in + self.time_step_out + i])
-                
-            dataX = np.array(dataX).reshape(len(y) - self.time_step_in, self.time_step_in, 1)
-            
-        # Autoregressive method with exogenous variables
-        else:
+
+            dataX = np.array(dataX).reshape(len(y) - self.time_step_in, self.time_step_in, 1)  # Shape consistency
+        else:  # Autoregression method with exogenous variables
             for i in range(len(y) - self.time_step_in):
-                # Sequence with both endogenous and exogenous variables starting from index (i = 0) 
-                # to the number of time steps defined for input
-                
-                arrays = np.concatenate([np.array(y[i: self.time_step_in + 1].reshape(-1, 1)), np.array(X[i:self.time_step_in + 1])], axis=1)
+                # Ensure the input sequence has consistent shape
+                arrays = np.concatenate((np.array(y[i:self.time_step_in + i]).reshape(-1, 1), np.array(X[i:self.time_step_in + i])), axis=1)
                 dataX.append(arrays)
-                
-                # Sequence with endogenous variable starting from the number of time steps defined 
-                # for input to the number of output steps
                 dataY.append(y[self.time_step_in + i: self.time_step_in + self.time_step_out + i])
-            
+                        
         return np.array(dataX), np.array(dataY)
     
     def fit(self, epochs=100, batch_size=16, patience=10):
@@ -156,13 +147,23 @@ class RNN_Regressor(Sequential):
 
         super().fit(dataX, dataY, epochs=epochs, batch_size=batch_size, verbose=1, callbacks=[early_stopping])
         self.trained = True
+        
+    def fittedvalues(self):
+        """
+        Returns the prediction of the model's training values.
+        """
+        if not self.trained:
+            raise ValueError("Training is required. Train the model with model.fit()")
+        else:
+            dataX, _ = self.create_dataset()
+            return self.normalized_endog.inverse_transform(self.predict(dataX).flatten().reshape(-1, 1)).flatten()
 
     def get_forecasting(self, exog: Optional[Union[np.ndarray, pd.DataFrame, pd.Series]] = None, steps: Optional[int] = None):
         """
-        Method to perform forecasting with the trained model.
+        Method to make predictions with the trained model
         
         Args:
-            exog (np.ndarray | pd.DataFrame | pd.Series | None optional): Exogenous variables
+            exog (np.ndarray | pd.DataFrame | pd.Series | None, optional): Exogenous variables
             steps (int): Number of steps to forecast ahead
         """
         if not self.trained:
@@ -170,27 +171,28 @@ class RNN_Regressor(Sequential):
         
         else:
             # Number of steps for projection
-            # If the model only has the series as a parameter, adjustments are needed
+            # If the model only has its own series as input, adjustments are necessary
             
             y_pred = []
+            y = self.normalized_endog.fit_transform(np.array(self.endog).reshape(-1, 1)).flatten()
             
             if self.exog is None:
                 if steps is None:
-                    raise ValueError("Define the number of steps for forecasting, steps = ")
+                    raise ValueError("Define the number of steps to make the forecast, steps = ")
                 
                 for step in range(steps):
                     if step == 0:
-                        # Makes the first projection after training only with endogenous variables
-                        array = np.array(self.endog[-self.time_step_in:])
+                        # Make the first prediction after training using only endogenous variables
+                        array = np.array(y[-self.time_step_in:])
                         array = array.reshape(1, self.time_step_in, 1)
                         y_pred_value = self.predict(array).flatten()
                         y_pred.append(y_pred_value)
                     else:
                         if step < self.time_step_in:
-                            array1 = np.array(self.endog[-self.time_step_in + step:]).reshape(-1, 1)
+                            array1 = np.array(y[-self.time_step_in + step:]).reshape(-1, 1)
                             array2 = np.array(y_pred[:step])
 
-                            array = np.concatenate((array1, array2), axis=0)
+                            array = np.concatenate((array1, array2), axis = 0)
                             array = array.reshape(1, self.time_step_in, 1)
                             
                             y_pred_value = self.predict(array).flatten()
@@ -205,13 +207,13 @@ class RNN_Regressor(Sequential):
                             
             else:
                 if self.normalize and exog is not None:
-                    exog = self.scaler.transform(exog)
+                    exog = self.normalized_exog.transform(exog)
                     
                 steps = exog.shape[0] if steps is None else steps
                 
                 for step in range(steps):
                     if step == 0:
-                        array = np.concatenate((np.array(self.endog[-self.time_step_in + step:]).reshape(-1, 1), np.array(self.exog[-self.time_step_in:])), axis=1)
+                        array = np.concatenate((np.array(y[-self.time_step_in + step:]).reshape(-1, 1), np.array(exog[-self.time_step_in:])), axis = 1)
                         array = array.reshape(1, array.shape[0], array.shape[1])
                         
                         y_pred_value = self.predict(array).flatten()
@@ -219,10 +221,10 @@ class RNN_Regressor(Sequential):
                         
                     else:
                         if step < self.time_step_in:
-                            array1 = np.concatenate((np.array(self.endog[-self.time_step_in + step:]).reshape(-1, 1), self.exog[-self.time_step_in + step:]), axis=1)
-                            array2 = np.concatenate(np.array(y_pred).reshape(-1, 1), np.array(exog[:step]), axis=1)
+                            array1 = np.concatenate((np.array(y[-self.time_step_in + step:]).reshape(-1, 1), exog[-self.time_step_in + step:]), axis = 1)
+                            array2 = np.concatenate((np.array(y_pred).reshape(-1, 1), np.array(exog[:step])), axis = 1)
                             
-                            array = np.concatenate((array1, array2), axis=0)
+                            array = np.concatenate((array1, array2), axis = 0)
                             array = array.reshape(1, array.shape[0], array.shape[1])
                             
                             y_pred_value = self.predict(array).flatten()
@@ -232,23 +234,13 @@ class RNN_Regressor(Sequential):
                             array1 = np.array(y_pred[-self.time_step_in:]).reshape(-1, 1)
                             array2 = np.array(np.array(exog[step - self.time_step_in:step]))
                             
-                            array = np.concatenate((array1, array2), axis=1)
+                            array = np.concatenate((array1, array2), axis = 1)
                             array = array.reshape(1, array.shape[0], array.shape[1])
                             
                             y_pred_value = self.predict(array).flatten()
                             y_pred.append(y_pred_value)
         
-        return np.array(y_pred).flatten()
-    
-    def fittedvalues(self):
-        """
-        Returns the prediction of the model's training values.
-        """
-        if not self.trained:
-            raise ValueError("Training is required. Train the model with model.fit()")
-        else:
-            dataX, _ = self.create_dataset()
-            return self.predict(dataX).flatten()
+        return self.normalized_endog.inverse_transform(np.array(y_pred).flatten().reshape(-1, 1)).flatten()
         
     def load_weights_model(self, weights_path: str):
         """

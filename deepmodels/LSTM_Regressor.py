@@ -51,7 +51,8 @@ class LSTM_Regressor(Sequential):
         self.random_state = random_state
         self.set_random_seed()
         self.normalize = normalize
-        self.scaler = MinMaxScaler() if normalize else None
+        self.normalized_endog = MinMaxScaler() # Scaler endog
+        self.normalized_exog = MinMaxScaler() if normalize else None # Scaler exog
         self.input_shape_model = self.get_input_shape_model()
         self.model = self.set_model()
         self.date_fit = dt.now()
@@ -102,31 +103,35 @@ class LSTM_Regressor(Sequential):
     def create_dataset(self):
         """
         Creates time windows for LSTM input
-        
+
         Returns:
             tuple: Input and output arrays for the LSTM model.
         """
         dataX, dataY = [], []
-        y = self.endog
+        y = self.normalized_endog.fit_transform(np.array(self.endog).reshape(-1, 1)).flatten()
         X = self.exog
-        
+
         if self.normalize and self.exog is not None:
-            X = self.scaler.fit_transform(X.copy())
-        
+            X = self.normalized_exog.fit_transform(X.copy())
+
         # Autoregression method without exogenous variables
         if X is None:
             for i in range(len(y) - self.time_step_in):
                 # Input sequence (values of the series in a sliding window)
-                dataX.append(np.array(y[i:self.time_step_in + i]))
+                dataX.append(np.array(y[i:self.time_step_in + i]).reshape(-1, 1))  # Ensure the shape is (time_step_in, 1)
                 # Output sequence (values of the series in a sliding window)
                 dataY.append(y[self.time_step_in + i: self.time_step_in + self.time_step_out + i])
-            dataX = np.array(dataX).reshape(len(y) - self.time_step_in, self.time_step_in, 1)
+
+            dataX = np.array(dataX).reshape(len(y) - self.time_step_in, self.time_step_in, 1)  # Shape consistency
         else:  # Autoregression method with exogenous variables
             for i in range(len(y) - self.time_step_in):
-                arrays = np.concatenate(np.array(y[i:self.time_step_in + 1].reshape(-1, 1)), np.array(X[i:self.time_step_in + 1]), axis=1)
+                # Ensure the input sequence has consistent shape
+                arrays = np.concatenate((np.array(y[i:self.time_step_in + i]).reshape(-1, 1), np.array(X[i:self.time_step_in + i])), axis=1)
                 dataX.append(arrays)
                 dataY.append(y[self.time_step_in + i: self.time_step_in + self.time_step_out + i])
+                        
         return np.array(dataX), np.array(dataY)
+
     
     def fit(self, epochs=100, batch_size=16, patience=10):
         """
@@ -141,37 +146,49 @@ class LSTM_Regressor(Sequential):
         early_stopping = EarlyStopping(monitor='loss', patience=patience)
         super().fit(dataX, dataY, epochs=epochs, batch_size=batch_size, verbose=1, callbacks=[early_stopping])
         self.trained = True
-
-    def get_forescating(self, exog: Optional[Union[np.ndarray, pd.DataFrame, pd.Series]] = None, steps: Optional[int] = None):
-        """
-        Método para realizar previsões com o modelo treinado dado
         
-        exog (np.ndarray | pd.DataFrame | pd.Serie | None opctional): Variaveis Exogenas
-        steps (int): Numero de passo para forescating a frente, caso o modelos treinado somente com 
-        autovariavel, definir step.
+    def fittedvalues(self):
+        """
+        Returns the predicted values from the training phase of the model.
         """
         if not self.trained:
-            raise ValueError("O treinamento é requido. Faça o treinamento com model.fit()")
+            raise ValueError("Training is required. Train the model with model.fit()")
+        else:
+            dataX, _ = self.create_dataset()
+            return self.normalized_endog.inverse_transform(self.predict(dataX).flatten().reshape(-1, 1)).flatten()
+
+    def get_forecasting(self, exog: Optional[Union[np.ndarray, pd.DataFrame, pd.Series]] = None, steps: Optional[int] = None):
+        """
+        Method to make predictions with the trained model
+        
+        Args:
+            exog (np.ndarray | pd.DataFrame | pd.Series | None, optional): Exogenous variables
+            steps (int): Number of steps to forecast ahead
+        """
+        if not self.trained:
+            raise ValueError("Training is required. Train the model with model.fit()")
         
         else:
-            # Numero de passos para projecao
-            # Caso o modelo somente tenha a propria serie como parametro é necessario ajustar
+            # Number of steps for projection
+            # If the model only has its own series as input, adjustments are necessary
             
             y_pred = []
+            y = self.normalized_endog.fit_transform(np.array(self.endog).reshape(-1, 1)).flatten()
             
             if self.exog is None:
                 if steps is None:
-                    raise ValueError("Defina o numero de steps para fazer o  forescating, steps = ")
+                    raise ValueError("Define the number of steps to make the forecast, steps = ")
                 
                 for step in range(steps):
                     if step == 0:
-                        # Faz a proje;'ao do primeiro valor apos treinamento somente com variaveis endog
-                        array = np.array(self.endog[-self.time_step_in:]).reshape(1, self.time_step_in, 1)
+                        # Make the first prediction after training using only endogenous variables
+                        array = np.array(y[-self.time_step_in:])
+                        array = array.reshape(1, self.time_step_in, 1)
                         y_pred_value = self.predict(array).flatten()
                         y_pred.append(y_pred_value)
                     else:
                         if step < self.time_step_in:
-                            array1 = np.array(self.endog[-self.time_step_in + step:]).reshape(-1, 1)
+                            array1 = np.array(y[-self.time_step_in + step:]).reshape(-1, 1)
                             array2 = np.array(y_pred[:step])
 
                             array = np.concatenate((array1, array2), axis = 0)
@@ -189,22 +206,22 @@ class LSTM_Regressor(Sequential):
                             
             else:
                 if self.normalize and exog is not None:
-                    exog = self.scaler.transform(exog)
+                    exog = self.normalized_exog.transform(exog)
                     
                 steps = exog.shape[0] if steps is None else steps
                 
                 for step in range(steps):
                     if step == 0:
-                        array = np.concatenate((np.array(self.endog[-self.time_step_in + step:]).reshape(-1, 1), np.array(self.exog[-self.time_step_in:])), axis = 1)
-                        array = array.reshape(1, array.reshape[0], array.shape[1])
+                        array = np.concatenate((np.array(y[-self.time_step_in + step:]).reshape(-1, 1), np.array(exog[-self.time_step_in:])), axis = 1)
+                        array = array.reshape(1, array.shape[0], array.shape[1])
                         
                         y_pred_value = self.predict(array).flatten()
                         y_pred.append(y_pred_value)
                         
                     else:
                         if step < self.time_step_in:
-                            array1 = np.concatenate((np.array(self.endog[-self.time_step_in + step:]).reshape(-1, 1), self.exog[-self.time_step_in + step:]), axis = 1)
-                            array2 = np.concatenate(np.array(y_pred).reshape(-1, 1), np.array(exog[:step]), axis = 1)
+                            array1 = np.concatenate((np.array(y[-self.time_step_in + step:]).reshape(-1, 1), exog[-self.time_step_in + step:]), axis = 1)
+                            array2 = np.concatenate((np.array(y_pred).reshape(-1, 1), np.array(exog[:step])), axis = 1)
                             
                             array = np.concatenate((array1, array2), axis = 0)
                             array = array.reshape(1, array.shape[0], array.shape[1])
@@ -222,17 +239,7 @@ class LSTM_Regressor(Sequential):
                             y_pred_value = self.predict(array).flatten()
                             y_pred.append(y_pred_value)
         
-        return np.array(y_pred).flatten()
-
-    def fittedvalues(self):
-        """
-        Returns the predicted values from the training phase of the model.
-        """
-        if not self.trained:
-            raise ValueError("Training is required. Train the model with model.fit()")
-        else:
-            dataX, _ = self.create_dataset()
-            return self.predict(dataX).flatten()
+        return self.normalized_endog.inverse_transform(np.array(y_pred).flatten().reshape(-1, 1)).flatten()
         
     def save_weights_model(self, weights_path: str):
         """
@@ -315,3 +322,54 @@ class LSTM_Regressor(Sequential):
             f"====================================================================================\n"
         )
         return summary_str
+
+if __name__ == "__main__":
+    
+    import numpy as np
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from sklearn.metrics import mean_absolute_percentage_error as mape
+
+    from datetime import datetime, timedelta
+    from sklearn.preprocessing import MinMaxScaler
+
+    usdbrl_data = pd.read_csv("USDBRL.csv", sep=";", header = 0)
+    
+    # Separando os dados em treinamento e teste
+    train_index = int(usdbrl_data.shape[0] * 0.95)
+
+    data_train = usdbrl_data["DS"][:train_index].values
+    data_out = usdbrl_data["DS"][train_index:].values
+
+    y_train = usdbrl_data["Close"][:train_index]
+    y_out = usdbrl_data["Close"][train_index:]
+
+    # Incluindo a variável 'Stochastic_RSI' como exógena (caso deseje)
+    exog_train = usdbrl_data["RSI"][:train_index].values.reshape(-1, 1)
+    exog_out = usdbrl_data["RSI"][train_index:].values.reshape(-1, 1)
+
+    # Definindo o número de passos no tempo (tamanho da janela)
+    time_step_in = 2
+    time_step_out = 1
+    normalize = True
+    
+    # LSTM_Regressor
+    model = LSTM_Regressor(
+                            endog= y_train, 
+                            exog= exog_train,
+                            time_step_in = time_step_in, 
+                            time_step_out = time_step_out, 
+                            random_state= 1,
+                            normalize = True            
+    )
+
+    model.fit(epochs= 100, batch_size= 16, patience=10)
+    
+    y_pred_train = model.fittedvalues()
+    y_pred_out_lstm = model.get_forecasting(steps= len(y_out), exog = exog_out)
+    
+    print(y_pred_out_lstm)
+
+    # mape_train_lstm = mape(y_train[time_step_in:], y_pred_train_lstm)
+    # mape_out_lstm = mape(y_out, y_pred_out_lstm)
