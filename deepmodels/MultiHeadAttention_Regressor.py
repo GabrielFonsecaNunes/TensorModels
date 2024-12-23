@@ -1,7 +1,9 @@
+import random
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 
+import tensorflow as tf
 from tensorflow.keras import Model
 from tensorflow.keras.layers import (
     Input, 
@@ -28,25 +30,10 @@ from statsmodels.tsa.stattools import breakvar_heteroskedasticity_test
 from scipy.stats import jarque_bera, skew, kurtosis
 
 class MultiHeadAttention_Regressor(Model):
-    """
-    Classe para construir e treinar um modelo MultiHeadAttention para regresssão de séries temporais,
-    com suporte para variáveis exógenas e normalização opcional.
-    """
-    
-    from tensorflow.keras import Model
-from tensorflow.keras.layers import (
-    Input, 
-    MultiHeadAttention, 
-    LayerNormalization, 
-    Dropout, 
-    Dense, 
-    GlobalAveragePooling1D
-)
-
-class MultiHeadAttention_Regressor(Model):
-    def __init__(self, endog, exog=None, time_step_in=10, time_step_out=1, normalize=True, **kwargs):
+    def __init__(self, endog, exog=None, time_step_in=10, time_step_out=1, random_state: int = 42, normalize=True, **kwargs):
         """
-        Inicializa o modelo MultiHeadAttention_Regressor.
+        Classe para construir e treinar um modelo MultiHeadAttention para regresssão de séries temporais,
+        com suporte para variáveis exógenas e normalização opcional.
         
         Args:
             endog (np.array | pd.DataFrame | pd.Series): Série temporal endógena.
@@ -60,6 +47,9 @@ class MultiHeadAttention_Regressor(Model):
         self.time_step_in = time_step_in
         self.time_step_out = time_step_out
         self.normalize = normalize
+        
+        self.random_state = random_state
+        self.set_random_seed()
 
         # Definir a forma de entrada
         n = 1  # Variável endógena
@@ -88,6 +78,14 @@ class MultiHeadAttention_Regressor(Model):
         self.compile(optimizer='adam', loss='mean_squared_error')
         
         self.date_fit = None
+        
+    def set_random_seed(self):
+        """
+        Função para definir a semente de aleatoriedade para garantir reprodutibilidade.
+        """
+        np.random.seed(self.random_state)
+        random.seed(self.random_state)
+        tf.random.set_seed(self.random_state)
         
     def get_input_shape_model(self):
         """

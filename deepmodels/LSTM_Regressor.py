@@ -322,7 +322,7 @@ class LSTM_Regressor(Sequential):
         summary_str = (
             f"                          Deep Learning LSTM Regression Results                          \n"
             f"====================================================================================\n"
-            f"Model:                 LSTM                     R-squared:               {r_square:>8.2f}\n"
+            f"Model:                 LSTM                      R-squared:               {r_square:>8.2f}\n"
             f"Num step in:           {self.time_step_in:<25}Adj. R-squared:          {adj_r_square:>8.2f}\n"
             f"Num step outs:         {self.time_step_out:<25}Log-Likelihood:         {log_likelihood:>8.2f}\n"
             f"No. Observations:      {self.endog.shape[0]:<25}AIC:                    {aic:>8.2f}\n"
