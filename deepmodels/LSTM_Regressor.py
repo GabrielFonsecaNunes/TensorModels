@@ -1,6 +1,8 @@
+import random
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
+import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, LSTM, Dropout
 from tensorflow.keras.callbacks import EarlyStopping
@@ -26,7 +28,7 @@ class LSTM_Regressor(Sequential):
     """
     
     def __init__(self, endog, exog: Optional[Union[np.ndarray, pd.DataFrame, pd.Series]] = None, time_step_in: int = 10, 
-                 time_step_out: int = 1, normalize: Optional[bool] = True, **kwargs):
+                 time_step_out: int = 1, random_state: int = 42, normalize: Optional[bool] = True, **kwargs):
         """
         Inicializa a classe LSTM_Regressor
         
@@ -36,18 +38,30 @@ class LSTM_Regressor(Sequential):
             time_step_int (int): Numero passos de tempo entrada,
             time_step_out (int): Numero passos de tempo saida, 
             normalize (bool): Se True, normaliza os dados
+            random_state (int): Seed para treinamento deterministico, 
+            default é 42.
         """
         super().__init__(**kwargs)
         self.endog = endog
         self.exog = exog
         self.time_step_in = time_step_in
         self.time_step_out = time_step_out
+        self.random_state = random_state
+        self.set_random_seed()
         self.normalize = normalize
         self.scaler = MinMaxScaler() if normalize else None
         self.input_shape_model = self.get_input_shape_model()
         self.model = self.set_model()
         self.date_fit = dt.now()
         self.trained = False
+        
+    def set_random_seed(self):
+        """
+        Função para definir a semente de aleatoriedade para garantir reprodutibilidade.
+        """
+        np.random.seed(self.random_state)
+        random.seed(self.random_state)
+        tf.random.set_seed(self.random_state)
         
     def get_input_shape_model(self):
         """
@@ -61,17 +75,39 @@ class LSTM_Regressor(Sequential):
         shape = n + m 
         return (self.time_step_in, shape)
         
-    def set_model(self): # Otimizar o numero de neuronios a partir das features
+    # def set_model(self): # Otimizar o numero de neuronios a partir das features
+    #     """
+    #     Define a arquitetura do Modelo LSTM
+        
+    #     Returns:
+    #         self: O modelo LSTM configurado.
+    #     """
+    #     self.add(LSTM(units = 32, activation = 'relu', return_sequences = True, input_shape = self.input_shape_model))
+    #     self.add(Dropout(0.2))
+    #     self.add(LSTM(units = 16, return_sequences = False))
+    #     self.add(Dense(self.time_step_out, activation = 'linear'))
+    #     self.compile(optimizer= 'adam', loss = 'mean_squared_error')
+        
+    def set_model(self): # Otimizar o número de neurônios a partir das features
         """
         Define a arquitetura do Modelo LSTM
         
         Returns:
             self: O modelo LSTM configurado.
         """
-        self.add(LSTM(units = 32, activation = 'relu', return_sequences = True, input_shape = self.input_shape_model))
-        self.add(Dropout(0.2))
-        self.add(LSTM(units = 16, return_sequences = False))
-        self.add(Dense(self.time_step_out, activation = 'linear'))
+        # Inicialização dos pesos com semente fixa
+        self.add(LSTM(units = 32, activation = 'relu', return_sequences = True, input_shape = self.input_shape_model,
+                      kernel_initializer=tf.keras.initializers.GlorotUniform(seed=self.random_state),
+                      recurrent_initializer=tf.keras.initializers.GlorotUniform(seed=self.random_state),
+                      bias_initializer=tf.keras.initializers.Zeros()))
+        self.add(Dropout(0.2, seed=self.random_state))  # Controla a aleatoriedade do Dropout
+        self.add(LSTM(units = 16, return_sequences = False,
+                      kernel_initializer=tf.keras.initializers.GlorotUniform(seed=self.random_state),
+                      recurrent_initializer=tf.keras.initializers.GlorotUniform(seed=self.random_state),
+                      bias_initializer=tf.keras.initializers.Zeros()))
+        self.add(Dense(self.time_step_out, activation = 'linear',
+                       kernel_initializer=tf.keras.initializers.GlorotUniform(seed=self.random_state),
+                       bias_initializer=tf.keras.initializers.Zeros()))
         self.compile(optimizer= 'adam', loss = 'mean_squared_error')
         
     def create_dataset(self):

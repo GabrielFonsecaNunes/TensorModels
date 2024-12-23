@@ -1,7 +1,8 @@
-
+import random
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
+import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, SimpleRNN, Dropout
 from tensorflow.keras.callbacks import EarlyStopping
@@ -26,7 +27,7 @@ class RNN_Regressor(Sequential):
     """
     
     def __init__(self, endog, exog: Optional[Union[np.ndarray, pd.DataFrame, pd.Series]] = None, time_step_in: int = 10, 
-                 time_step_out: int = 1, normalize: Optional[bool] = True, **kwargs):
+                 time_step_out: int = 1, random_state: int = 42, normalize: Optional[bool] = True, **kwargs):
         """
         Inicializa a classe RNN_Regressor
         
@@ -42,12 +43,22 @@ class RNN_Regressor(Sequential):
         self.exog = exog
         self.time_step_in = time_step_in
         self.time_step_out = time_step_out
+        self.random_state = random_state
+        self.set_random_seed()
         self.normalize = normalize
         self.scaler = MinMaxScaler() if normalize else None
         self.input_shape_model = self.get_input_shape_model()
         self.model = self.set_model()
         self.date_fit = dt.now()
         self.trained = False
+        
+    def set_random_seed(self):
+        """
+        Função para definir a semente de aleatoriedade para garantir reprodutibilidade.
+        """
+        np.random.seed(self.random_state)
+        random.seed(self.random_state)
+        tf.random.set_seed(self.random_state)
         
     def get_input_shape_model(self):
         """
@@ -60,24 +71,28 @@ class RNN_Regressor(Sequential):
         m = 0 if self.exog is None else self.exog.shape[1]
         shape = n + m 
         return (self.time_step_in, shape)
-        
-    def set_model(self):
+            
+    def set_model(self): # Otimizar o número de neurônios a partir das features
         """
-        Define a arquitetura do Modelo RNN
+        Define a arquitetura do Modelo LSTM
         
         Returns:
-            self: O modelo RNN configurado.
+            self: O modelo LSTM configurado.
         """
-        # Adiciona a primeira camada RNN com 32 neurônios
-        self.add(SimpleRNN(units=32, activation='relu', return_sequences=True, input_shape=self.input_shape_model))
-        # Adiciona Dropout para evitar overfitting
-        self.add(Dropout(0.2))
-        # Adiciona a segunda camada RNN com 16 neurônios
-        self.add(SimpleRNN(units=16, return_sequences=False))
-        # Adiciona a camada densa final
-        self.add(Dense(self.time_step_out, activation='linear'))
-        # Compila o modelo
-        self.compile(optimizer='adam', loss='mean_squared_error')
+        # Inicialização dos pesos com semente fixa
+        self.add(SimpleRNN(units = 32, activation = 'relu', return_sequences = True, input_shape = self.input_shape_model,
+                      kernel_initializer=tf.keras.initializers.GlorotUniform(seed=self.random_state),
+                      recurrent_initializer=tf.keras.initializers.GlorotUniform(seed=self.random_state),
+                      bias_initializer=tf.keras.initializers.Zeros()))
+        self.add(Dropout(0.2, seed=self.random_state))  # Controla a aleatoriedade do Dropout
+        self.add(SimpleRNN(units = 16, return_sequences = False,
+                      kernel_initializer=tf.keras.initializers.GlorotUniform(seed=self.random_state),
+                      recurrent_initializer=tf.keras.initializers.GlorotUniform(seed=self.random_state),
+                      bias_initializer=tf.keras.initializers.Zeros()))
+        self.add(Dense(self.time_step_out, activation = 'linear',
+                       kernel_initializer=tf.keras.initializers.GlorotUniform(seed=self.random_state),
+                       bias_initializer=tf.keras.initializers.Zeros()))
+        self.compile(optimizer= 'adam', loss = 'mean_squared_error')
 
         
     def create_dataset(self):
