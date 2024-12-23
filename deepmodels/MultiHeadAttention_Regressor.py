@@ -32,15 +32,19 @@ from scipy.stats import jarque_bera, skew, kurtosis
 class MultiHeadAttention_Regressor(Model):
     def __init__(self, endog, exog=None, time_step_in=10, time_step_out=1, random_state: int = 42, normalize=True, **kwargs):
         """
-        Classe para construir e treinar um modelo MultiHeadAttention para regresssão de séries temporais,
-        com suporte para variáveis exógenas e normalização opcional.
+        Multi Head Attetion Regressor Model
+        
+        MultiHeadAttention model for time series regression,
+        with support for exogenous variables and optional normalization.
         
         Args:
-            endog (np.array | pd.DataFrame | pd.Series): Série temporal endógena.
-            exog (np.array | pd.DataFrame | pd.Series | None): Variáveis exógenas.
-            time_step_in (int): Número de passos de tempo na entrada.
-            time_step_out (int): Número de passos de tempo na saída.
-            normalize (bool): Se True, normaliza os dados.
+            endog (np.array | pd.DataFrame | pd.Series): Endogenous time series.
+            exog (np.array | pd.DataFrame | pd.Series | None): Exogenous variables.
+            time_step_in (int): Number of time steps in the input.
+            time_step_out (int): Number of time steps in the output.
+            normalize (bool): If True, normalizes the data.
+            random_state (int): Seed for deterministic training,
+            default is 42.
         """
         self.endog = endog
         self.exog = exog
@@ -51,37 +55,37 @@ class MultiHeadAttention_Regressor(Model):
         self.random_state = random_state
         self.set_random_seed()
 
-        # Definir a forma de entrada
-        n = 1  # Variável endógena
-        m = 0 if exog is None else exog.shape[1]  # Variáveis exógenas (se houver)
+        # Define the input shape
+        n = 1  # Endogenous variable
+        m = 0 if exog is None else exog.shape[1]  # Exogenous variables (if any)
         input_shape = (time_step_in, n + m)
 
-        # Definir as camadas diretamente no construtor
+        # Define layers directly in the constructor
         inputs = Input(shape=input_shape)
 
         # MultiHeadAttention
         attention_output = MultiHeadAttention(num_heads=4, key_dim=16)(inputs, inputs)
         
-        # Dropout para regularização
+        # Dropout for regularization
         dropout_output = Dropout(0.2)(attention_output)
 
-        # GlobalAveragePooling1D para reduzir dimensionalidade
+        # GlobalAveragePooling1D to reduce dimensionality
         pooled_output = GlobalAveragePooling1D()(dropout_output)
 
-        # Camada densa final para previsão
+        # Final dense layer for prediction
         outputs = Dense(time_step_out, activation='linear')(pooled_output)
 
-        # Inicializar o modelo base com inputs e outputs
+        # Initialize the model with inputs and outputs
         super().__init__(inputs=inputs, outputs=outputs, **kwargs)
 
-        # Compilar o modelo
+        # Compile the model
         self.compile(optimizer='adam', loss='mean_squared_error')
         
         self.date_fit = None
         
     def set_random_seed(self):
         """
-        Função para definir a semente de aleatoriedade para garantir reprodutibilidade.
+        Function to set the random seed to ensure reproducibility.
         """
         np.random.seed(self.random_state)
         random.seed(self.random_state)
@@ -89,10 +93,10 @@ class MultiHeadAttention_Regressor(Model):
         
     def get_input_shape_model(self):
         """
-        Retorna a forma de entrada para a MultiHeadAttention
+        Returns the input shape for the MultiHeadAttention
         
         Returns:
-            tuple: A forma de entrada
+            tuple: The input shape
         """
         n = 1
         m = 0 if self.exog is None else self.exog.shape[1]
@@ -101,10 +105,10 @@ class MultiHeadAttention_Regressor(Model):
         
     def create_dataset(self):
         """
-        Cria janelas de tempo para a entrada MultiHeadAttention
+        Creates time windows for the MultiHeadAttention input
         
         Returns:
-            tuple: Arrays de entrada e saída para o modelo MultiHeadAttention.
+            tuple: Input and output arrays for the MultiHeadAttention model.
         """
         
         dataX, dataY = [], []
@@ -114,43 +118,43 @@ class MultiHeadAttention_Regressor(Model):
         if self.normalize and self.exog is not None:
             X = self.scaler.fit_transform(X.copy())
         
-        # Metodo de Divisao auto regressao sem variaveis exogenas
+        # Autoregression method without exogenous variables
         if X is None:
             for i in range(len(y) - self.time_step_in):
                 
-                # Entrada Sequencia Entrada (Valores da Serie em um janela deslizante)
+                # Input Sequence (Values of the series in a sliding window)
                 dataX.append(np.array(y[i:self.time_step_in + i]))
                 
-                # Variavel Resposta Sequencia Saida (Valores da Serie em um janela deslizante)
+                # Response Variable Output Sequence (Values of the series in a sliding window)
                 dataY.append(y[self.time_step_in + i: self.time_step_in + self.time_step_out + i])
                 
             dataX = np.array(dataX).reshape(len(y) - self.time_step_in, self.time_step_in, 1)
             
-        # Metodo de Divisao Auto Regressao com Variaveis Exogenas
+        # Autoregression method with Exogenous Variables
         else:
             for i in range(len(y) - self.time_step_in):
-                # Sequencia com variavel endog e variavel exogena começando no index (i = 0) 
-                # até numero de passos definidos de tempo de entrada
+                # Sequence with endogenous and exogenous variables starting at index (i = 0) 
+                # up to the number of defined input time steps
                 
                 arrays = np.concatenate(np.array(y[i: self.time_step_in + 1].reshape(-1, 1)), np.array(X[i:self.time_step_in + 1]), axis = 1)
                 dataX.append(arrays)
                 
-                # Sequencia com variavel endog a partir do numero de passos definidos de tempo de entrada 
-                # até numero passos de saida
+                # Sequence with endogenous variable from the defined input time steps 
+                # to the defined output steps
                 dataY.append(y[self.time_step_in + i: self.time_step_in + self.time_step_out + i])
             
         return np.array(dataX), np.array(dataY)
     
     def fit(self, epochs = 100, batch_size = 16, patience = 10):
         """
-        Treina o modelo MultiHeadAttention
+        Trains the MultiHeadAttention model
         
         Args:
-            epochs (int): Número de épocas para treinamento
-            batch_size (int): Tamanho do lote para treinamento
-            patience (int): Número de épocas sem melhoria para interromper o treinamento
+            epochs (int): Number of epochs for training
+            batch_size (int): Batch size for training
+            patience (int): Number of epochs without improvement to stop training
         """
-        # Caso a série temporal e variaveis exogenass sejam passadas
+        # In case the time series and exogenous variables are provided
         
         dataX, dataY = self.create_dataset()
         early_stopping = EarlyStopping(monitor = 'loss', patience = patience)
@@ -158,29 +162,29 @@ class MultiHeadAttention_Regressor(Model):
         self.trained = True
         self.date_fit = dt.now()
 
-    def get_forescating(self, exog: Optional[Union[np.ndarray, pd.DataFrame, pd.Series]] = None, steps: Optional[int] = None):
+    def get_forecasting(self, exog: Optional[Union[np.ndarray, pd.DataFrame, pd.Series]] = None, steps: Optional[int] = None):
         """
-        Método para realizar previsões com o modelo treinado dado
+        Method to make predictions with the trained model
         
-        exog (np.ndarray | pd.DataFrame | pd.Serie | None opctional): Variaveis Exogenas
-        steps (int): Numero de passo para forescating a frente
+        exog (np.ndarray | pd.DataFrame | pd.Series | None optional): Exogenous variables
+        steps (int): Number of steps to forecast ahead
         """
         if not self.trained:
-            raise ValueError("O treinamento é requido. Faça o treinamento com model.fit()")
+            raise ValueError("Training is required. Please train the model with model.fit()")
         
         else:
-            # Numero de passos para projecao
-            # Caso o modelo somente tenha a propria serie como parametro é necessario ajustar
+            # Number of steps for projection
+            # If the model only has the series itself as a parameter, adjustment is needed
             
             y_pred = []
             
             if self.exog is None:
                 if steps is None:
-                    raise ValueError("Defina o numero de steps para fazer o  forescating, steps = ")
+                    raise ValueError("Define the number of steps for forecasting, steps = ")
                 
                 for step in range(steps):
                     if step == 0:
-                        # Faz a proje;'ao do primeiro valor apos treinamento somente com variaveis endog
+                        # Makes the projection of the first value after training using only endogenous variables
                         array = np.array(self.endog[-self.time_step_in:])
                         array = array.reshape(1, self.time_step_in, 1)
                         y_pred_value = self.predict(array).flatten()
@@ -242,80 +246,81 @@ class MultiHeadAttention_Regressor(Model):
     
     def fittedvalues(self):
         """
-        Retorna a predicao dos valores do treino do modelo
+        Returns the predicted values of the trained model
         """
         if not self.trained:
-            raise ValueError("O treinamento é requido. Faça o treinamento com model.fit()")
+            raise ValueError("Training is required. Please train the model with model.fit()")
         else:
             dataX, _ = self.create_dataset()
             return self.predict(dataX).flatten()
         
-    def load_weights_model(self, weights_paht: str):
+    def load_weights_model(self, weights_path: str):
         """
-        Carrega os pesos do modelo a partir de um arquivo .h5
+        Loads the model weights from an .h5 file
         
         Args:
-            weights_path (str): Caminho para o arquivo .h5 contendo os pesos do modelo.
+            weights_path (str): Path to the .h5 file containing the model weights.
         """
         
-        # Recria a arquitetura do modelo 
+        # Recreate the model architecture 
         
         self.model = self.set_mode()
         
-        self.model.load_weights(weights_paht)
+        self.model.load_weights(weights_path)
         self.trained = True
         
     def summary_model(self):
         """
-        Retorna o sumário do modelo treinado.
+        Returns the summary of the trained model.
         """
         if not self.trained:
-            raise ValueError("O Modelo ainda não foi treinado. Faça o treinamento com model.fit()")
+            raise ValueError("The model has not been trained. Train the model with model.fit()")
         
         y_pred_train = self.fittedvalues()
         
-        # Calcula os resíduos
+        # Calculate residuals
         residuals = self.endog[self.time_step_in:] - y_pred_train
-        rss = np.sum((self.endog[self.time_step_in:] - y_pred_train) ** 2)
+        rss = np.sum(residuals ** 2)
         rse = np.sum((self.endog[self.time_step_in:] - y_pred_train.mean()) ** 2)
         
         n = len(self.endog[self.time_step_in:])
         k = self.time_step_out if self.exog is None else self.exog.shape[1] + self.time_step_out
         
-        # Calcular o R2
-        r_square = 1 - (rss / rse)
-        adj_r_square = 1 - ((1 - r_square) * (n - 1) / (n - k - 1))
-        
-        log_likelihood = -n / 2 * np.log(2 * np.pi * rss / n) - rss / (2 * rss / n)     
+        # Log-Likelihood, AIC, BIC, and HIC
+        log_likelihood = -n / 2 * np.log(2 * np.pi * rss / n) - rss / (2 * rss / n)
         aic = 2 * k - 2 * log_likelihood
         bic = np.log(n) * k - 2 * log_likelihood
+        hic = np.log(np.log(n)) * k - 2 * log_likelihood
         
-        # Calcula o Durbin-Watson
+        # Durbin-Watson statistic
         dw_stat = durbin_watson(residuals)
         
-        # Teste de Ljung-Box
+        # Ljung-Box test
         num_lags = min(10, len(residuals) // 2)
         ljungbox_results = acorr_ljungbox(residuals, lags=num_lags, return_df=True)
+        ljungbox_stat = ljungbox_results['lb_stat'].iloc[-1]
         ljungbox_pvalue = ljungbox_results['lb_pvalue'].iloc[-1]
         
-        # Outros testes
+        # Other tests
         het = breakvar_heteroskedasticity_test(residuals)
         jb_test = jarque_bera(residuals)
         skewness = skew(residuals)
         kurt = kurtosis(residuals)
         
-        # Exibir o sumário
+        data_fit = str(dt.strftime(self.date_fit, "%Y-%m-%d"))          
+        
+        # Display the summary
         summary_str = (
-            f"                          Deep Learning MultiHeadAttention Regression Results                          \n"
+            f"           Deep Learning Multi Head Attention Tranform Regression Results    \n"
             f"====================================================================================\n"
-            f"Model:                 MultiHeadAttention                     R-squared:               {r_square:>8.2f}\n"
-            f"Num step in:           {self.time_step_in:<25}Adj. R-squared:          {adj_r_square:>8.2f}\n"
-            f"Num step outs:         {self.time_step_out:<25}Log-Likelihood:         {log_likelihood:>8.2f}\n"
-            f"No. Observations:      {self.endog.shape[0]:<25}AIC:                    {aic:>8.2f}\n"
-            f"Date:                  {data_fit:<25}BIC:                    {bic:>8.2f}\n"
+            f"Model:                 Transform                Durbin-Watson:          {dw_stat:>8.2f}\n"
+            f"Num step in:           {self.time_step_in:<25}Log-Likelihood:         {log_likelihood:>8.2f}\n"
+            f"Num step outs:         {self.time_step_out:<25}AIC:                    {aic:>8.2f}\n"
+            f"No. Observations:      {self.endog.shape[0]:<25}BIC:                    {bic:>8.2f}\n"
+            f"Date:                  {data_fit:<25}HIC:                    {hic:>8.2f}\n"
             f"====================================================================================\n"
-            f"Durbin-Watson:         {dw_stat:>8.2f}                 Jarque-Bera (JB):       {jb_test[0]:>8.2f}\n"
-            f"Prob (Ljung-Box):      {ljungbox_pvalue:.2e}                 Prob(JB):              {jb_test[1]:>8.2f}\n"
+            f"Ljung-Box (Q):         {ljungbox_stat:>8.2f}                 Jarque-Bera (JB):       {jb_test[0]:>8.2f}\n"
+            f"Prob(Q):               {ljungbox_pvalue:.2e}                 Prob(JB):              {jb_test[1]:>8.2f}\n"
             f"Heteroskedasticity(H): {het[0]:>8.2f}                 Skew:                  {skewness:>8.2f}\n"
             f"Prob(H) (two-side):    {het[1]:>8.2f}                 Kurtosis:              {kurt:>8.2f}\n"
             f"====================================================================================\n"
