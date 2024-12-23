@@ -51,7 +51,8 @@ class MultiHeadAttention_Regressor(Model):
         self.time_step_in = time_step_in
         self.time_step_out = time_step_out
         self.normalize = normalize
-        
+        self.normalized_endog = MinMaxScaler() # Scaler endog
+        self.normalized_exog = MinMaxScaler() if normalize else None # Scaler exog
         self.random_state = random_state
         self.set_random_seed()
 
@@ -105,44 +106,34 @@ class MultiHeadAttention_Regressor(Model):
         
     def create_dataset(self):
         """
-        Creates time windows for the MultiHeadAttention input
-        
+        Creates time windows for LSTM input
+
         Returns:
-            tuple: Input and output arrays for the MultiHeadAttention model.
+            tuple: Input and output arrays for the LSTM model.
         """
-        
         dataX, dataY = [], []
-        y = self.endog
+        y = self.normalized_endog.fit_transform(np.array(self.endog).reshape(-1, 1)).flatten()
         X = self.exog
-        
+
         if self.normalize and self.exog is not None:
-            X = self.scaler.fit_transform(X.copy())
-        
+            X = self.normalized_exog.fit_transform(X.copy())
+
         # Autoregression method without exogenous variables
         if X is None:
             for i in range(len(y) - self.time_step_in):
-                
-                # Input Sequence (Values of the series in a sliding window)
-                dataX.append(np.array(y[i:self.time_step_in + i]))
-                
-                # Response Variable Output Sequence (Values of the series in a sliding window)
+                # Input sequence (values of the series in a sliding window)
+                dataX.append(np.array(y[i:self.time_step_in + i]).reshape(-1, 1))  # Ensure the shape is (time_step_in, 1)
+                # Output sequence (values of the series in a sliding window)
                 dataY.append(y[self.time_step_in + i: self.time_step_in + self.time_step_out + i])
-                
-            dataX = np.array(dataX).reshape(len(y) - self.time_step_in, self.time_step_in, 1)
-            
-        # Autoregression method with Exogenous Variables
-        else:
+
+            dataX = np.array(dataX).reshape(len(y) - self.time_step_in, self.time_step_in, 1)  # Shape consistency
+        else:  # Autoregression method with exogenous variables
             for i in range(len(y) - self.time_step_in):
-                # Sequence with endogenous and exogenous variables starting at index (i = 0) 
-                # up to the number of defined input time steps
-                
-                arrays = np.concatenate(np.array(y[i: self.time_step_in + 1].reshape(-1, 1)), np.array(X[i:self.time_step_in + 1]), axis = 1)
+                # Ensure the input sequence has consistent shape
+                arrays = np.concatenate((np.array(y[i:self.time_step_in + i]).reshape(-1, 1), np.array(X[i:self.time_step_in + i])), axis=1)
                 dataX.append(arrays)
-                
-                # Sequence with endogenous variable from the defined input time steps 
-                # to the defined output steps
                 dataY.append(y[self.time_step_in + i: self.time_step_in + self.time_step_out + i])
-            
+                        
         return np.array(dataX), np.array(dataY)
     
     def fit(self, epochs = 100, batch_size = 16, patience = 10):
@@ -166,32 +157,34 @@ class MultiHeadAttention_Regressor(Model):
         """
         Method to make predictions with the trained model
         
-        exog (np.ndarray | pd.DataFrame | pd.Series | None optional): Exogenous variables
-        steps (int): Number of steps to forecast ahead
+        Args:
+            exog (np.ndarray | pd.DataFrame | pd.Series | None, optional): Exogenous variables
+            steps (int): Number of steps to forecast ahead
         """
         if not self.trained:
-            raise ValueError("Training is required. Please train the model with model.fit()")
+            raise ValueError("Training is required. Train the model with model.fit()")
         
         else:
             # Number of steps for projection
-            # If the model only has the series itself as a parameter, adjustment is needed
+            # If the model only has its own series as input, adjustments are necessary
             
             y_pred = []
+            y = self.normalized_endog.fit_transform(np.array(self.endog).reshape(-1, 1)).flatten()
             
             if self.exog is None:
                 if steps is None:
-                    raise ValueError("Define the number of steps for forecasting, steps = ")
+                    raise ValueError("Define the number of steps to make the forecast, steps = ")
                 
                 for step in range(steps):
                     if step == 0:
-                        # Makes the projection of the first value after training using only endogenous variables
-                        array = np.array(self.endog[-self.time_step_in:])
+                        # Make the first prediction after training using only endogenous variables
+                        array = np.array(y[-self.time_step_in:])
                         array = array.reshape(1, self.time_step_in, 1)
                         y_pred_value = self.predict(array).flatten()
                         y_pred.append(y_pred_value)
                     else:
                         if step < self.time_step_in:
-                            array1 = np.array(self.endog[-self.time_step_in + step:]).reshape(-1, 1)
+                            array1 = np.array(y[-self.time_step_in + step:]).reshape(-1, 1)
                             array2 = np.array(y_pred[:step])
 
                             array = np.concatenate((array1, array2), axis = 0)
@@ -209,22 +202,22 @@ class MultiHeadAttention_Regressor(Model):
                             
             else:
                 if self.normalize and exog is not None:
-                    exog = self.scaler.transform(exog)
+                    exog = self.normalized_exog.transform(exog)
                     
                 steps = exog.shape[0] if steps is None else steps
                 
                 for step in range(steps):
                     if step == 0:
-                        array = np.concatenate((np.array(self.endog[-self.time_step_in + step:]).reshape(-1, 1), np.array(self.exog[-self.time_step_in:])), axis = 1)
-                        array = array.reshape(1, array.reshape[0], array.shape[1])
+                        array = np.concatenate((np.array(y[-self.time_step_in + step:]).reshape(-1, 1), np.array(exog[-self.time_step_in:])), axis = 1)
+                        array = array.reshape(1, array.shape[0], array.shape[1])
                         
                         y_pred_value = self.predict(array).flatten()
                         y_pred.append(y_pred_value)
                         
                     else:
                         if step < self.time_step_in:
-                            array1 = np.concatenate((np.array(self.endog[-self.time_step_in + step:]).reshape(-1, 1), self.exog[-self.time_step_in + step:]), axis = 1)
-                            array2 = np.concatenate(np.array(y_pred).reshape(-1, 1), np.array(exog[:step]), axis = 1)
+                            array1 = np.concatenate((np.array(y[-self.time_step_in + step:]).reshape(-1, 1), exog[-self.time_step_in + step:]), axis = 1)
+                            array2 = np.concatenate((np.array(y_pred).reshape(-1, 1), np.array(exog[:step])), axis = 1)
                             
                             array = np.concatenate((array1, array2), axis = 0)
                             array = array.reshape(1, array.shape[0], array.shape[1])
@@ -242,7 +235,7 @@ class MultiHeadAttention_Regressor(Model):
                             y_pred_value = self.predict(array).flatten()
                             y_pred.append(y_pred_value)
         
-        return np.array(y_pred).flatten()
+        return self.normalized_endog.inverse_transform(np.array(y_pred).flatten().reshape(-1, 1)).flatten()
     
     def fittedvalues(self):
         """
@@ -252,7 +245,7 @@ class MultiHeadAttention_Regressor(Model):
             raise ValueError("Training is required. Please train the model with model.fit()")
         else:
             dataX, _ = self.create_dataset()
-            return self.predict(dataX).flatten()
+            return self.normalized_endog.inverse_transform(self.predict(dataX).flatten().reshape(-1, 1)).flatten()
         
     def load_weights_model(self, weights_path: str):
         """
