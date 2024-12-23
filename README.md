@@ -2,10 +2,10 @@
 
 **DeepModels** is a Python library that provides simple and intuitive access to advanced deep learning architectures, such as:
 
-- **LSTM (Long Short-Term Memory)**
-- **GRU (Gated Recurrent Unit)**
-- **Transformer Models**
 - **Recurrent Neural Network (RNN)**
+- **GRU (Gated Recurrent Unit)**
+- **LSTM (Long Short-Term Memory)**
+- **Multi-Head Attention (Transformer Models)**
 
 Designed for **time series forecasting and modeling**, DeepModels offers a **user-friendly interface** inspired by the **statsmodels** library. With straightforward methods for **fitting**, **predicting**, and **evaluating models**, it simplifies the application of deep learning techniques, making it accessible to both beginners and professionals.
 
@@ -19,7 +19,7 @@ pip install git+https://github.com/GabrielFonsecaNunes/deepmodels
 
 ## **Example Usage**
 
-Below is an example of how to use the DeepModels library to implement LSTM, GRU, and RNN models for time series forecasting.
+Below is an example of how to use the DeepModels library to implement LSTM, GRU, RNN, and Multi-Head Attention models for time series forecasting.
 
 ### 1. **Import Required Libraries**
 
@@ -90,9 +90,10 @@ y_pred_train = lstm_model.fittedvalues()
 # Forecast future values (out-of-sample data)
 y_pred_oot = lstm_model.get_forescating(steps=len(y_out), exog=None)
 ```
+
 ---
 
-### 5. **GRU Model**
+### 4. **GRU Model**
 
 #### **Initialization and Training**
 ```python
@@ -100,7 +101,7 @@ from deepmodels import GRU_Regressor
 
 # Initialize the GRU model
 gru_model = GRU_Regressor(
-                endog=y_train_normalized_series, 
+                endog=y_train, 
                 exog=None,  # Add exogenous variables if needed
                 time_step_in=time_step_in, 
                 time_step_out=time_step_out, 
@@ -125,7 +126,8 @@ y_pred_oot_gru = gru_model.get_forescating(steps=len(y_out), exog=None)
 ```
 
 ---
-### 6. **RNN Model**
+
+### 5. **RNN Model**
 
 #### **Initialization and Training**
 ```python
@@ -133,7 +135,7 @@ from deepmodels import RNN_Regressor
 
 # Initialize the RNN model
 rnn_model = RNN_Regressor(
-                endog=y_train_normalized_series, 
+                endog=y_train, 
                 exog=None,  # Add exogenous variables if needed
                 time_step_in=time_step_in, 
                 time_step_out=time_step_out, 
@@ -158,3 +160,35 @@ y_pred_oot_rnn = rnn_model.get_forescating(steps=len(y_out), exog=None)
 ```
 
 ---
+
+### 6. **Multi-Head Attention Model**
+
+#### **Initialization and Training**
+```python
+from deepmodels import MultiHeadAttention_Regressor
+
+# Initialize the MultiHead Attention model
+multheadattention_model = MultiHeadAttention_Regressor(
+                endog=y_train, 
+                exog=None,  # Add exogenous variables if needed
+                time_step_in=time_step_in, 
+                time_step_out=time_step_out, 
+                random_state=2,
+                normalize=True
+)
+
+# Fit the model to the data
+multheadattention_model.fit(epochs=150, batch_size=16, patience=10)
+```
+
+#### **Get Fitted Values (Training Predictions)**
+```python
+# Get the fitted values (predictions on the training data)
+y_pred_train_attention = multheadattention_model.fittedvalues()
+```
+
+#### **Forecasting (Out-of-Sample Predictions)**
+```python
+# Forecast future values (out-of-sample data)
+y_pred_oot_attention = multheadattention_model.get_forescating(steps=len(y_out), exog=None)
+```
