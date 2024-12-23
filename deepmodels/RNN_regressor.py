@@ -1,7 +1,8 @@
-
+import random
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
+import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, SimpleRNN, Dropout
 from tensorflow.keras.callbacks import EarlyStopping
@@ -21,27 +22,31 @@ from scipy.stats import jarque_bera, skew, kurtosis
 
 class RNN_Regressor(Sequential):
     """
-    Classe para construir e treinar um modelo RNN para regresssão de séries temporais,
-    com suporte para variáveis exógenas e normalização opcional.
+    Recurrent Neural Network RNN Model Regressor for time series regression,
+    with support for exogenous variables and optional normalization.
     """
     
     def __init__(self, endog, exog: Optional[Union[np.ndarray, pd.DataFrame, pd.Series]] = None, time_step_in: int = 10, 
-                 time_step_out: int = 1, normalize: Optional[bool] = True, **kwargs):
+                 time_step_out: int = 1, random_state: int = 42, normalize: Optional[bool] = True, **kwargs):
         """
-        Inicializa a classe RNN_Regressor
+        Recurrent Neural Network RNN Model Regressor
         
         Args:
-            endog (np.array | pd.DataFrame | pd.Series): Serie Temporal
-            exog (np.array | pd.DataFrame | pd.Series): Variaveis Exogenas
-            time_step_int (int): Numero passos de tempo entrada,
-            time_step_out (int): Numero passos de tempo saida, 
-            normalize (bool): Se True, normaliza os dados
+            endog (np.array | pd.DataFrame | pd.Series): Time series data
+            exog (np.array | pd.DataFrame | pd.Series): Exogenous variables
+            time_step_in (int): Number of input time steps
+            time_step_out (int): Number of output time steps
+            normalize (bool): If True, normalizes the data,
+            random_state (int): Seed for deterministic training,
+            default is 42.
         """
         super().__init__(**kwargs)
         self.endog = endog
         self.exog = exog
         self.time_step_in = time_step_in
         self.time_step_out = time_step_out
+        self.random_state = random_state
+        self.set_random_seed()
         self.normalize = normalize
         self.scaler = MinMaxScaler() if normalize else None
         self.input_shape_model = self.get_input_shape_model()
@@ -49,43 +54,55 @@ class RNN_Regressor(Sequential):
         self.date_fit = dt.now()
         self.trained = False
         
+    def set_random_seed(self):
+        """
+        Function to set the random seed to ensure reproducibility.
+        """
+        np.random.seed(self.random_state)
+        random.seed(self.random_state)
+        tf.random.set_seed(self.random_state)
+        
     def get_input_shape_model(self):
         """
-        Retorna a forma de entrada para a RNN
+        Returns the input shape for the RNN
         
         Returns:
-            tuple: A forma de entrada
+            tuple: The input shape
         """
         n = 1
         m = 0 if self.exog is None else self.exog.shape[1]
         shape = n + m 
         return (self.time_step_in, shape)
-        
+            
     def set_model(self):
         """
-        Define a arquitetura do Modelo RNN
+        Defines the architecture of the RNN model
         
         Returns:
-            self: O modelo RNN configurado.
+            self: The configured RNN model.
         """
-        # Adiciona a primeira camada RNN com 32 neurônios
-        self.add(SimpleRNN(units=32, activation='relu', return_sequences=True, input_shape=self.input_shape_model))
-        # Adiciona Dropout para evitar overfitting
-        self.add(Dropout(0.2))
-        # Adiciona a segunda camada RNN com 16 neurônios
-        self.add(SimpleRNN(units=16, return_sequences=False))
-        # Adiciona a camada densa final
-        self.add(Dense(self.time_step_out, activation='linear'))
-        # Compila o modelo
+        # Initialize weights with a fixed seed
+        self.add(SimpleRNN(units=32, activation='relu', return_sequences=True, input_shape=self.input_shape_model,
+                           kernel_initializer=tf.keras.initializers.GlorotUniform(seed=self.random_state),
+                           recurrent_initializer=tf.keras.initializers.GlorotUniform(seed=self.random_state),
+                           bias_initializer=tf.keras.initializers.Zeros()))
+        self.add(Dropout(0.2, seed=self.random_state))  # Controls the randomness of Dropout
+        self.add(SimpleRNN(units=16, return_sequences=False,
+                           kernel_initializer=tf.keras.initializers.GlorotUniform(seed=self.random_state),
+                           recurrent_initializer=tf.keras.initializers.GlorotUniform(seed=self.random_state),
+                           bias_initializer=tf.keras.initializers.Zeros()))
+        self.add(Dense(self.time_step_out, activation='linear',
+                       kernel_initializer=tf.keras.initializers.GlorotUniform(seed=self.random_state),
+                       bias_initializer=tf.keras.initializers.Zeros()))
         self.compile(optimizer='adam', loss='mean_squared_error')
 
         
     def create_dataset(self):
         """
-        Cria janelas de tempo para a entrada RNN
+        Creates time windows for RNN input
         
         Returns:
-            tuple: Arrays de entrada e saída para o modelo RNN.
+            tuple: Input and output arrays for the RNN model.
         """
         
         dataX, dataY = [], []
@@ -95,74 +112,75 @@ class RNN_Regressor(Sequential):
         if self.normalize and self.exog is not None:
             X = self.scaler.fit_transform(X.copy())
         
-        # Metodo de Divisao auto regressao sem variaveis exogenas
+        # Autoregressive method without exogenous variables
         if X is None:
             for i in range(len(y) - self.time_step_in):
                 
-                # Entrada Sequencia Entrada (Valores da Serie em um janela deslizante)
+                # Input Sequence (Time series values in a sliding window)
                 dataX.append(np.array(y[i:self.time_step_in + i]))
                 
-                # Variavel Resposta Sequencia Saida (Valores da Serie em um janela deslizante)
+                # Output Sequence (Time series values in a sliding window)
                 dataY.append(y[self.time_step_in + i: self.time_step_in + self.time_step_out + i])
                 
             dataX = np.array(dataX).reshape(len(y) - self.time_step_in, self.time_step_in, 1)
             
-        # Metodo de Divisao Auto Regressao com Variaveis Exogenas
+        # Autoregressive method with exogenous variables
         else:
             for i in range(len(y) - self.time_step_in):
-                # Sequencia com variavel endog e variavel exogena começando no index (i = 0) 
-                # até numero de passos definidos de tempo de entrada
+                # Sequence with both endogenous and exogenous variables starting from index (i = 0) 
+                # to the number of time steps defined for input
                 
-                arrays = np.concatenate(np.array(y[i: self.time_step_in + 1].reshape(-1, 1)), np.array(X[i:self.time_step_in + 1]), axis = 1)
+                arrays = np.concatenate([np.array(y[i: self.time_step_in + 1].reshape(-1, 1)), np.array(X[i:self.time_step_in + 1])], axis=1)
                 dataX.append(arrays)
                 
-                # Sequencia com variavel endog a partir do numero de passos definidos de tempo de entrada 
-                # até numero passos de saida
+                # Sequence with endogenous variable starting from the number of time steps defined 
+                # for input to the number of output steps
                 dataY.append(y[self.time_step_in + i: self.time_step_in + self.time_step_out + i])
             
         return np.array(dataX), np.array(dataY)
     
-    def fit(self, epochs = 100, batch_size = 16, patience = 10):
+    def fit(self, epochs=100, batch_size=16, patience=10):
         """
-        Treina o modelo RNN
+        Trains the RNN model
         
         Args:
-            epochs (int): Número de épocas para treinamento
-            batch_size (int): Tamanho do lote para treinamento
-            patience (int): Número de épocas sem melhoria para interromper o treinamento
+            epochs (int): Number of epochs for training
+            batch_size (int): Batch size for training
+            patience (int): Number of epochs without improvement to stop training
         """
-        # Caso a série temporal e variaveis exogenass sejam passadas
+        # If the time series and exogenous variables are provided
         
         dataX, dataY = self.create_dataset()
         
-        early_stopping = EarlyStopping(monitor = 'loss', patience = patience)
+        early_stopping = EarlyStopping(monitor='loss', patience=patience)
 
-        super().fit(dataX, dataY, epochs = epochs, batch_size = batch_size, verbose = 1, callbacks = [early_stopping])
+        super().fit(dataX, dataY, epochs=epochs, batch_size=batch_size, verbose=1, callbacks=[early_stopping])
         self.trained = True
 
-    def get_forescating(self, exog: Optional[Union[np.ndarray, pd.DataFrame, pd.Series]] = None, steps: Optional[int] = None):
+    def get_forecasting(self, exog: Optional[Union[np.ndarray, pd.DataFrame, pd.Series]] = None, steps: Optional[int] = None):
         """
-        Método para realizar previsões com o modelo treinado dado
+        Method to perform forecasting with the trained model.
         
-        exog (np.ndarray | pd.DataFrame | pd.Serie | None opctional): Variaveis Exogenas
-        steps (int): Numero de passo para forescating a frente
+        Args:
+            exog (np.ndarray | pd.DataFrame | pd.Series | None optional): Exogenous variables
+            steps (int): Number of steps to forecast ahead
         """
         if not self.trained:
-            raise ValueError("O treinamento é requido. Faça o treinamento com model.fit()")
+            raise ValueError("Training is required. Train the model with model.fit()")
         
         else:
-            # Numero de passos para projecao
-            # Caso o modelo somente tenha a propria serie como parametro é necessario ajustar
+            # Number of steps for projection
+            # If the model only has the series as a parameter, adjustments are needed
             
             y_pred = []
             
             if self.exog is None:
                 if steps is None:
-                    raise ValueError("Defina o numero de steps para fazer o  forescating, steps = ")
+                    raise ValueError("Define the number of steps for forecasting, steps = ")
                 
                 for step in range(steps):
                     if step == 0:
-                        # Faz a proje;'ao do primeiro valor apos treinamento somente com variaveis endog
+                        # Makes the first projection after training only with endogenous variables
                         array = np.array(self.endog[-self.time_step_in:])
                         array = array.reshape(1, self.time_step_in, 1)
                         y_pred_value = self.predict(array).flatten()
@@ -172,7 +190,7 @@ class RNN_Regressor(Sequential):
                             array1 = np.array(self.endog[-self.time_step_in + step:]).reshape(-1, 1)
                             array2 = np.array(y_pred[:step])
 
-                            array = np.concatenate((array1, array2), axis = 0)
+                            array = np.concatenate((array1, array2), axis=0)
                             array = array.reshape(1, self.time_step_in, 1)
                             
                             y_pred_value = self.predict(array).flatten()
@@ -193,18 +211,18 @@ class RNN_Regressor(Sequential):
                 
                 for step in range(steps):
                     if step == 0:
-                        array = np.concatenate((np.array(self.endog[-self.time_step_in + step:]).reshape(-1, 1), np.array(self.exog[-self.time_step_in:])), axis = 1)
-                        array = array.reshape(1, array.reshape[0], array.shape[1])
+                        array = np.concatenate((np.array(self.endog[-self.time_step_in + step:]).reshape(-1, 1), np.array(self.exog[-self.time_step_in:])), axis=1)
+                        array = array.reshape(1, array.shape[0], array.shape[1])
                         
                         y_pred_value = self.predict(array).flatten()
                         y_pred.append(y_pred_value)
                         
                     else:
                         if step < self.time_step_in:
-                            array1 = np.concatenate((np.array(self.endog[-self.time_step_in + step:]).reshape(-1, 1), self.exog[-self.time_step_in + step:]), axis = 1)
-                            array2 = np.concatenate(np.array(y_pred).reshape(-1, 1), np.array(exog[:step]), axis = 1)
+                            array1 = np.concatenate((np.array(self.endog[-self.time_step_in + step:]).reshape(-1, 1), self.exog[-self.time_step_in + step:]), axis=1)
+                            array2 = np.concatenate(np.array(y_pred).reshape(-1, 1), np.array(exog[:step]), axis=1)
                             
-                            array = np.concatenate((array1, array2), axis = 0)
+                            array = np.concatenate((array1, array2), axis=0)
                             array = array.reshape(1, array.shape[0], array.shape[1])
                             
                             y_pred_value = self.predict(array).flatten()
@@ -214,7 +232,7 @@ class RNN_Regressor(Sequential):
                             array1 = np.array(y_pred[-self.time_step_in:]).reshape(-1, 1)
                             array2 = np.array(np.array(exog[step - self.time_step_in:step]))
                             
-                            array = np.concatenate((array1, array2), axis = 1)
+                            array = np.concatenate((array1, array2), axis=1)
                             array = array.reshape(1, array.shape[0], array.shape[1])
                             
                             y_pred_value = self.predict(array).flatten()
@@ -224,63 +242,62 @@ class RNN_Regressor(Sequential):
     
     def fittedvalues(self):
         """
-        Retorna a predicao dos valores do treino do modelo
+        Returns the prediction of the model's training values.
         """
         if not self.trained:
-            raise ValueError("O treinamento é requido. Faça o treinamento com model.fit()")
+            raise ValueError("Training is required. Train the model with model.fit()")
         else:
             dataX, _ = self.create_dataset()
             return self.predict(dataX).flatten()
         
-    def load_weights_model(self, weights_paht: str):
+    def load_weights_model(self, weights_path: str):
         """
-        Carrega os pesos do modelo a partir de um arquivo .h5
+        Loads the model weights from a .h5 file
         
         Args:
-            weights_path (str): Caminho para o arquivo .h5 contendo os pesos do modelo.
+            weights_path (str): Path to the .h5 file containing the model weights.
         """
         
-        # Recria a arquitetura do modelo 
+        # Recreate the model architecture 
         
         self.model = self.set_model()
         
-        self.model.load_weights(weights_paht)
+        self.model.load_weights(weights_path)
         self.trained = True
         
     def summary_model(self):
         """
-        Retorna o sumário do modelo treinado.
+        Returns the summary of the trained model.
         """
         if not self.trained:
-            raise ValueError("O Modelo ainda não foi treinado. Faça o treinamento com model.fit()")
+            raise ValueError("The model has not been trained. Train the model with model.fit()")
         
         y_pred_train = self.fittedvalues()
         
-        # Calcula os resíduos
+        # Calculate residuals
         residuals = self.endog[self.time_step_in:] - y_pred_train
-        rss = np.sum((self.endog[self.time_step_in:] - y_pred_train) ** 2)
+        rss = np.sum(residuals ** 2)
         rse = np.sum((self.endog[self.time_step_in:] - y_pred_train.mean()) ** 2)
         
         n = len(self.endog[self.time_step_in:])
         k = self.time_step_out if self.exog is None else self.exog.shape[1] + self.time_step_out
         
-        # Calcular o R2
-        r_square = 1 - (rss / rse)
-        adj_r_square = 1 - ((1 - r_square) * (n - 1) / (n - k - 1))
-        
-        log_likelihood = -n / 2 * np.log(2 * np.pi * rss / n) - rss / (2 * rss / n)     
+        # Log-Likelihood, AIC, BIC, and HIC
+        log_likelihood = -n / 2 * np.log(2 * np.pi * rss / n) - rss / (2 * rss / n)
         aic = 2 * k - 2 * log_likelihood
         bic = np.log(n) * k - 2 * log_likelihood
+        hic = np.log(np.log(n)) * k - 2 * log_likelihood
         
-        # Calcula o Durbin-Watson
+        # Durbin-Watson statistic
         dw_stat = durbin_watson(residuals)
         
-        # Teste de Ljung-Box
+        # Ljung-Box test
         num_lags = min(10, len(residuals) // 2)
         ljungbox_results = acorr_ljungbox(residuals, lags=num_lags, return_df=True)
+        ljungbox_stat = ljungbox_results['lb_stat'].iloc[-1]
         ljungbox_pvalue = ljungbox_results['lb_pvalue'].iloc[-1]
         
-        # Outros testes
+        # Other tests
         het = breakvar_heteroskedasticity_test(residuals)
         jb_test = jarque_bera(residuals)
         skewness = skew(residuals)
@@ -288,18 +305,18 @@ class RNN_Regressor(Sequential):
         
         data_fit = str(dt.strftime(self.date_fit, "%Y-%m-%d"))          
         
-        # Exibir o sumário
+        # Display the summary
         summary_str = (
             f"                          Deep Learning RNN Regression Results                          \n"
             f"====================================================================================\n"
-            f"Model:                 RNN                     R-squared:               {r_square:>8.2f}\n"
-            f"Num step in:           {self.time_step_in:<25}Adj. R-squared:          {adj_r_square:>8.2f}\n"
-            f"Num step outs:         {self.time_step_out:<25}Log-Likelihood:         {log_likelihood:>8.2f}\n"
-            f"No. Observations:      {self.endog.shape[0]:<25}AIC:                    {aic:>8.2f}\n"
-            f"Date:                  {data_fit:<25}BIC:                    {bic:>8.2f}\n"
+            f"Model:                 RNN                      Durbin-Watson:          {dw_stat:>8.2f}\n"
+            f"Num step in:           {self.time_step_in:<25}Log-Likelihood:         {log_likelihood:>8.2f}\n"
+            f"Num step outs:         {self.time_step_out:<25}AIC:                    {aic:>8.2f}\n"
+            f"No. Observations:      {self.endog.shape[0]:<25}BIC:                    {bic:>8.2f}\n"
+            f"Date:                  {data_fit:<25}HIC:                    {hic:>8.2f}\n"
             f"====================================================================================\n"
-            f"Durbin-Watson:         {dw_stat:>8.2f}                 Jarque-Bera (JB):       {jb_test[0]:>8.2f}\n"
-            f"Prob (Ljung-Box):      {ljungbox_pvalue:.2e}                 Prob(JB):              {jb_test[1]:>8.2f}\n"
+            f"Ljung-Box (Q):         {ljungbox_stat:>8.2f}                 Jarque-Bera (JB):       {jb_test[0]:>8.2f}\n"
+            f"Prob(Q):               {ljungbox_pvalue:.2e}                 Prob(JB):              {jb_test[1]:>8.2f}\n"
             f"Heteroskedasticity(H): {het[0]:>8.2f}                 Skew:                  {skewness:>8.2f}\n"
             f"Prob(H) (two-side):    {het[1]:>8.2f}                 Kurtosis:              {kurt:>8.2f}\n"
             f"====================================================================================\n"
