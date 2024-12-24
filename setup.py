@@ -21,7 +21,7 @@ who need powerful deep learning techniques without the complexity of low-level i
     python_requires='>=3.9',
     install_requires = [
         "tensorflow>=2.18.0",
-        "pandas>=2.2.3",
+        "pandas>=2.1.2",
         "numpy>=2.0.2",
         "statsmodels>=0.14.4",
         "scikit-learn>=1.1.3"
