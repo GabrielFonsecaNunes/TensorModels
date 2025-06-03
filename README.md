@@ -1,25 +1,25 @@
-# DeepModels: Easy-to-Use Deep Learning Models for Time Series Analysis
+# TensorModels: Easy-to-Use Deep Learning Models for Time Series Analysis
 
-**DeepModels** is a Python library that provides simple and intuitive access to advanced deep learning architectures, such as:
+**TensorModels** is a Python library that provides simple and intuitive access to advanced deep learning architectures, such as:
 
 - **Recurrent Neural Network (RNN)**
 - **GRU (Gated Recurrent Unit)**
 - **LSTM (Long Short-Term Memory)**
 - **Multi-Head Attention (Transformer Models)**
 
-Designed for **time series forecasting and modeling**, DeepModels offers a **user-friendly interface** inspired by the **statsmodels** library. With straightforward methods for **fitting**, **predicting**, and **evaluating models**, it simplifies the application of deep learning techniques, making it accessible to both beginners and professionals.
+Designed for **time series forecasting and modeling**, TensorModels offers a **user-friendly interface** inspired by the **statsmodels** library. With straightforward methods for **fitting**, **predicting**, and **evaluating models**, it simplifies the application of deep learning techniques, making it accessible to both beginners and professionals.
 
 ## **Installation**
 
 You can install the library via pip (once it's available on PyPI):
 
 ```bash
-pip install git+https://github.com/GabrielFonsecaNunes/deepmodels
+pip install git+https://github.com/GabrielFonsecaNunes/TensorModels
 ```
 
 ## **Example Usage**
 
-Below is an example of how to use the DeepModels library to implement LSTM, GRU, RNN, and Multi-Head Attention models for time series forecasting.
+Below is an example of how to use the TensorModels library to implement LSTM, GRU, RNN, and Multi-Head Attention models for time series forecasting.
 
 ### 1. **Import Required Libraries**
 
@@ -63,7 +63,7 @@ normalize = True
 
 #### **Initialization and Training**
 ```python
-from deepmodels import LSTM_Regressor
+from TensorModels import LSTM_Regressor
 
 # Initialize the LSTM model
 lstm_model = LSTM_Regressor(
@@ -97,7 +97,7 @@ y_pred_oot = lstm_model.get_forescating(steps=len(y_out), exog=None)
 
 #### **Initialization and Training**
 ```python
-from deepmodels import GRU_Regressor
+from TensorModels import GRU_Regressor
 
 # Initialize the GRU model
 gru_model = GRU_Regressor(
@@ -131,7 +131,7 @@ y_pred_oot_gru = gru_model.get_forescating(steps=len(y_out), exog=None)
 
 #### **Initialization and Training**
 ```python
-from deepmodels import RNN_Regressor
+from TensorModels import RNN_Regressor
 
 # Initialize the RNN model
 rnn_model = RNN_Regressor(
@@ -165,7 +165,7 @@ y_pred_oot_rnn = rnn_model.get_forescating(steps=len(y_out), exog=None)
 
 #### **Initialization and Training**
 ```python
-from deepmodels import MultiHeadAttention_Regressor
+from TensorModels import MultiHeadAttention_Regressor
 
 # Initialize the MultiHead Attention model
 multheadattention_model = MultiHeadAttention_Regressor(
